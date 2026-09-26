@@ -4,6 +4,9 @@
   "description": "Know what you're touching. Put the cursor in unfamiliar Python code and see what it does, how it's reached, why it exists and what breaks if you change it.",
   "version": "0.1.0",
   "publisher": "dhanyaaleena",
+  "author": {
+    "name": "Dhanya Koottunkal"
+  },
   "license": "MIT",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -90,7 +93,7 @@
         "codeContext.ai.enabled": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Send a small evidence bundle to a language model to describe this code in plain language. **Off by default** \u2014 when on, the function's source, its entry points, caller and callee names, and commit messages leave your machine (to Anthropic, Google, or your editor's model provider, depending on `#codeContext.ai.model#`). Results are cached by the hash of that bundle."
+          "markdownDescription": "Send a small evidence bundle to a language model to describe this code in plain language. **Off by default** — when on, the function's source, its entry points, caller and callee names, and commit messages leave your machine (to Anthropic, Google, or your editor's model provider, depending on `#codeContext.ai.model#`). Results are cached by the hash of that bundle."
         },
         "codeContext.ai.model": {
           "type": "string",
@@ -106,13 +109,13 @@
             "claude-opus-5"
           ],
           "enumDescriptions": [
-            "Anthropic. Cheap and fast \u2014 this is translation over a pre-built bundle, so it is a sensible default.",
-            "The editor's own models via vscode.lm \u2014 GitHub Copilot in VS Code. No API key; uses your editor subscription.",
+            "Anthropic. Cheap and fast — this is translation over a pre-built bundle, so it is a sensible default.",
+            "The editor's own models via vscode.lm — GitHub Copilot in VS Code. No API key; uses your editor subscription.",
             "Google. Pinned Flash release; comparisons against it stay valid over time.",
             "Google. Previous Flash release, for A/B against 3.6.",
             "Google. Older Flash release.",
-            "Google. Always the newest Flash \u2014 convenient, but a moving target for comparisons.",
-            "Anthropic. Mid-tier \u2014 try it if Flash or Haiku phrase things poorly.",
+            "Google. Always the newest Flash — convenient, but a moving target for comparisons.",
+            "Anthropic. Mid-tier — try it if Flash or Haiku phrase things poorly.",
             "Anthropic. Most capable and most expensive; only if the cheaper models disappoint."
           ],
           "markdownDescription": "Model for the plain-language narration. `claude-*` uses your Anthropic key, `gemini-*` your Google key, and `vscode-lm` the models your editor offers extensions (GitHub Copilot in VS Code) with no key. If the chosen provider has no key set, the editor's models are tried before giving up. Requires `#codeContext.ai.enabled#`."
@@ -125,7 +128,7 @@
         "codeContext.ai.editorModel": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Which editor model to use for `vscode-lm` (or the no-key fallback), matched against its family, id or name \u2014 e.g. `haiku`, `gpt-4.1`, `sonnet`. Empty picks the cheapest capable one. Run **Code Context: List editor models** to see what is available."
+          "markdownDescription": "Which editor model to use for `vscode-lm` (or the no-key fallback), matched against its family, id or name — e.g. `haiku`, `gpt-4.1`, `sonnet`. Empty picks the cheapest capable one. Run **Code Context: List editor models** to see what is available."
         }
       }
     }
