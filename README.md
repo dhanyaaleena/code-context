@@ -1,180 +1,101 @@
-# Code Context — spike extension
+<p align="center"><img src="images/icon.png" width="96" alt="Code Context"></p>
 
-A throwaway VS Code extension that puts the three context affordances in a real
-editor so we can argue about them with something running, rather than in the
-abstract. It has no backend: everything is computed locally from the open
-workspace and Git.
+<h1 align="center">Code Context</h1>
+<p align="center"><b>Know what you're touching.</b></p>
 
-## Run it
+Put your cursor in a Python function you didn't write. Code Context tells you what it does in
+plain language, how people and systems reach it, why it was built, and what breaks if you change it —
+in a panel beside your code.
 
-```bash
-npm install && npm run compile
+<p align="center"><img src="images/panel.png" width="420" alt="The Code Context panel beside a Python function"></p>
+
+## What you get
+
+- **The feature it belongs to**, in product words, with a one-line summary and who notices if it breaks.
+- **How the outside world reaches it** — the URL, scheduled job, CLI command or event that ends up here,
+  read from your framework's routing (FastAPI, Flask, Celery, APScheduler, Click, Typer, Django signals).
+- **What it does, step by step** — read from the function body, numbered, and click-through to each line.
+- **Why it exists** — from the commit that first introduced it, with the changes since. When no commit
+  gave a reason, it says the answer is *inferred*.
+- **What it touches** — a small map of callers and callees you can click through to walk the codebase.
+  Links the analysis can't prove are drawn dashed.
+
+Everything except the plain-language sentences is computed locally from your code and Git. Anything
+written by an AI has an **amber left border**, so you always know which is which.
+
+## Getting started
+
+1. Install **Code Context** and open a Python project that uses Git.
+2. Click the lens above any function — `3 callers · 5 calls — Show context` — or run
+   **Code Context: Show context panel** from the command palette.
+
+That's it for the computed view. Nothing leaves your machine.
+
+### Optional: the plain-language layer
+
+Turn it on in settings:
+
+```json
+"codeContext.ai.enabled": true
 ```
 
-`npm install` also restores `sample/` — a small Python repo with fabricated Git
-history (including one commit whose message marks it AI-assisted) — from
-`fixtures/sample.bundle`. A repository can't be committed inside another one, so
-its history travels as that single bundle file. `npm run sample` restores it on
-its own.
+Then give it one way to reach a model:
 
-Open this folder in VS Code and press **F5**. A second window opens on
-`sample/`. Open `billing/invoice.py` and put the cursor inside
-`calculate_invoice_total`.
+| Route | Setup | Billed to |
+|---|---|---|
+| **GitHub Copilot** (VS Code) | Nothing — used automatically when no key is set. Approve the one-time consent prompt. | Your Copilot plan |
+| **Anthropic** | **Code Context: Set API key** → Anthropic. Default model `claude-haiku-4-5`. | Your API usage |
+| **Google Gemini** | **Code Context: Set API key** → Google, and pick a `gemini-*` model. | Your API usage |
 
-To install it into your everyday editor instead:
+A description typically costs well under a cent on Haiku, and each function is only paid for once
+until its code changes. Keys live in the editor's secret storage, never in settings or the repository.
 
-```bash
-npx @vscode/vsce@2.32.0 package -o code-context.vsix
-```
+**What is sent when it's on:** for the function you open — its first 80 lines, its routes, caller and
+callee names with file paths, commit messages, and co-changed file names. Nothing else, and only to
+the provider you chose.
 
-then **Extensions: Install from VSIX…**. (Pinned to 2.32.0: later versions fail
-on Node 20.17.)
+## When the code changes
 
-## Documents
+If you — or Cursor's agent, or Claude Code — edit the function, the panel says
+*"This function changed since it was analysed"* and waits. It never re-analyses behind your back,
+so an agent writing code in bursts doesn't bill you for descriptions of half-written functions.
+Click **Re-analyse** when you're ready.
 
-| | |
+## Commands
+
+| Command | |
 |---|---|
-| [`docs/Code_Context_User_Manual.pdf`](docs/Code_Context_User_Manual.pdf) | Setup, reading the panel, a worked example, troubleshooting |
-| [`docs/Code_Context_Architecture.pdf`](docs/Code_Context_Architecture.pdf) | Principles, components, the index, the pipeline, the AI layer |
+| Show context panel | Open the panel for the function at the cursor |
+| Re-analyse this function | Rebuild and ask the AI again |
+| Set API key | Store an Anthropic or Google key |
+| List editor models | What your editor offers extensions (e.g. Copilot) |
+| Clear AI narration cache | Forget saved descriptions |
+| Re-index workspace | Rebuild the index from scratch |
 
-Each PDF is printed from the `.html` beside it with headless Chrome.
+## Settings
 
-## The three tiers
+| Setting | Default | |
+|---|---|---|
+| `codeContext.ai.enabled` | `false` | The plain-language layer |
+| `codeContext.ai.model` | `claude-haiku-4-5` | Also `vscode-lm`, `gemini-3.6-flash`, `claude-sonnet-5`, … |
+| `codeContext.ai.editorModel` | | Which editor model to prefer, e.g. `haiku` |
+| `codeContext.codeLens` | `true` | Show the lens above functions |
+| `codeContext.maxFiles` | `400` | Python files indexed |
 
-| Tier | Surface | What it answers | Why it's this surface |
-|---|---|---|---|
-| 1 | **CodeLens** above each `def` | "is there anything here?" | The only always-visible, clickable affordance. Hovers can't be clicked into existence. |
-| 2 | **Hover** | "do I need to look at this?" | Cheap glance. Text only — see the limits below. |
-| 3 | **Webview panel**, opened Beside | "where am I, and what breaks?" | The only surface that can render the interactive map. |
+## Good to know
 
-The panel follows the cursor: move to another function and it re-centres,
-which is the traversal behaviour the design is built around.
+- **Python only**, for now.
+- **Caller detection reads names, not types.** Calls made through `getattr`, registries or dispatch
+  tables can be missed, so the extension never labels code as unused.
+- **Claude Pro/Max and Cursor subscriptions can't be used** for the AI layer — neither gives extensions
+  access to its models.
 
-## What a hover can and cannot do
+## Documentation
 
-Established while building this, so it doesn't get relitigated:
+- [User manual (PDF)](docs/Code_Context_User_Manual.pdf) — setup, reading the panel, a worked example, troubleshooting
+- [Architecture (PDF)](docs/Code_Context_Architecture.pdf) — how it works and why it's built this way
+- [Developing Code Context](docs/DEVELOPMENT.md) — building, running and packaging from source
 
-- `MarkdownString` renders a **sanitized HTML subset** when `supportHtml = true`.
-  `style` is allowed on `<span>` only, and only for `color` / `background-color`.
-- **Command links** work when `isTrusted = true` — that is the only interactivity.
-- Images are allowed from `data:` URIs, but **SVG is broken in hovers**
-  ([microsoft/vscode#133389](https://github.com/microsoft/vscode/issues/133389)).
-  PNG works. So the map cannot be rendered in a hover without rasterising it,
-  which loses theme-awareness — not worth it.
-- There is **no API for a floating webview popover** at a text position
-  ([microsoft/vscode#175234](https://github.com/microsoft/vscode/issues/175234), open since 2023).
+## License
 
-Hence the split: hover = digest, webview = map.
-
-## What is real, and what is faked
-
-**Real**
-
-- Symbol extraction (regex over `def` / `class`, with body ranges)
-- Callee extraction from the function body
-- Caller resolution across the workspace, with a confidence label:
-  `resolved` (defining file, or the file imports the name) vs `heuristic` (name match only)
-- Transitive impact — one extra hop, capped
-- Test detection by path convention
-- Git history via **`git log -L :symbol:file`**, which is genuinely symbol-scoped,
-  falling back to `--follow` file history. AI-assisted commits are flagged by
-  message pattern.
-- Dirty-buffer detection (`git status --porcelain`), surfaced as "buffer ahead of `<sha>`"
-
-**Entry points — the bridge to product language**
-
-Route paths (FastAPI, Flask, including prefixes composed across `include_router`),
-Celery tasks, APScheduler jobs, Click/Typer commands, FastAPI events and Django
-signals. These propagate: a function with no decorator of its own inherits the
-routes of the handlers that reach it, which is how `get_current_admin` becomes
-"reached from GET /api/v1/admin/stats".
-
-**The one AI call — opt-in**
-
-`codeContext.ai.enabled` (default **off**) turns on a single call that translates
-the deterministic evidence into plain language: a human feature name, what the
-code does, how it is reached, and what breaks.
-
-- **Model:** `codeContext.ai.model`, default **`claude-haiku-4-5`**. This is
-  translation over a bundle that was already assembled — not a reasoning task —
-  so the cheapest model is the right default at roughly $1/$5 per million tokens
-  against Opus's $5/$25. Sonnet 5 and Opus 5 are selectable if Haiku's feature
-  names read poorly. Note that `output_config.effort` is **rejected by Haiku 4.5**,
-  so it is only sent for the models that accept it; changing the model ID alone
-  would 400.
-
-- **What leaves the machine when it is on:** the function's source (first 80
-  lines), its entry points, caller and callee names with file paths, commit
-  subjects, and co-change filenames. Nothing else. Off by default for exactly
-  this reason.
-- **Provider:** inferred from the model id — `claude-*` uses the Anthropic key,
-  `gemini-*` the Google key. No second setting to drift out of sync.
-- **No key? The editor's own models.** `vscode-lm` uses whatever the editor
-  offers extensions through `vscode.lm` — GitHub Copilot's models in VS Code,
-  Claude included — with a one-time consent prompt and usage billed to the
-  user's Copilot plan. It is also the fallback when the chosen provider has no
-  key set, and the panel names the model that actually answered
-  (`claude haiku 4.5 via copilot`). Other editors may offer nothing through
-  this API; *Code Context: List editor models* reports what yours does.
-  Claude Pro/Max and Cursor subscriptions are **not** usable here — neither
-  exposes its model access to extensions.
-- **Key storage:** the editor's secret storage, via *Code Context: Set API key*
-  (it asks which provider). Never settings, never the repo. `ANTHROPIC_API_KEY`,
-  `GEMINI_API_KEY` and `GOOGLE_API_KEY` work as fallbacks.
-- **One schema, both providers:** Anthropic via `jsonSchemaOutputFormat`, Gemini
-  via `responseJsonSchema`, and the response is shape-checked either way — neither
-  provider is trusted to have obeyed the schema. That is what makes the two
-  narrations comparable rather than merely similar.
-- **Grounding:** the model is instructed to use only the supplied evidence, to
-  cite the evidence ids it relied on, to drop to `low` confidence rather than
-  guess, and never to call code unused — absent callers may be a resolution miss.
-- **Caching:** by SHA-256 of the evidence bundle, in `globalState`. The same
-  symbol never costs twice until its evidence changes. *Clear AI narration cache*
-  resets it.
-- **Never blocking:** the panel renders deterministic content first and folds the
-  narration in when it arrives. Switch the model off and you lose sentences, not facts.
-
-**Still stubbed**
-
-- PR and issue metadata. PR numbers are parsed out of commit subjects rather
-  than fetched from a provider.
-
-## What the spike is meant to prove — and what it shows
-
-1. **The map reads faster than the list.** Judge this by opening the panel and
-   looking, not by reading the code.
-2. **Resolution quality is the real risk.** Open `sample/dynamic_dispatch.py`:
-   it calls `calculate_invoice_total` via `getattr`, and the panel does not show
-   it as a caller. That is a false negative, in eight files. A real codebase has
-   thousands. This is the argument for Jedi or Pyright over regex or raw `ast`.
-3. **Confidence has to be visible.** Heuristic edges render dashed and red.
-   Delete the `importRe` check in `context.ts` and watch how quickly the panel
-   starts lying confidently.
-4. **High fan-in breaks the drawing.** Nodes collapse to `+N more` past three,
-   with a full list underneath. Try it on a symbol with many callers.
-
-## Files
-
-```
-src/pythonScan.ts   regex symbol + call extraction (deliberately naive)
-src/repoIndex.ts    the index: build once, persist by commit, update per file
-src/workflow.ts     a function body → typed, ordered steps
-src/entryPoints.ts  routes, tasks, schedules, commands, events, signals
-src/context.ts      assembles the ContextResponse — replace this with an HTTP client
-src/git.ts          git log -L with bodies, co-change, changed-since, dirty files
-src/ai.ts           evidence bundle, schema, provider routing, validation, cache
-src/cache.ts        memoization by document version
-src/hover.ts        tier 2
-src/codelens.ts     tier 1
-src/panel.ts        tier 3 shell + CSP
-src/extension.ts    wiring: focus, staleness, commands
-media/panel.js      the panel: glance, sections, map, stale bar
-media/panel.css     themed from --vscode-* tokens so it follows the colour theme
-fixtures/           sample.bundle — the demo repo's history
-scripts/sample.js   restores sample/ from the bundle
-docs/               the PDFs and their HTML sources
-```
-
-`ContextResponse` in `src/types.ts` is the API shape from the design doc. Nothing
-outside `context.ts` knows the data is local, so pointing this at a real backend
-means replacing one function.
+[MIT](LICENSE)

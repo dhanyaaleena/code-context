@@ -1,5 +1,6 @@
 # build output
 out/
+dist/
 node_modules/
 *.vsix
 

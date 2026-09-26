@@ -1,21 +1,47 @@
 {
-  "name": "code-context-spike",
-  "displayName": "Code Context (spike)",
-  "description": "Three-tier context affordance spike: CodeLens, hover digest, and a webview map.",
-  "version": "0.0.1",
-  "publisher": "local",
-  "private": true,
-  "license": "UNLICENSED",
+  "name": "code-context",
+  "displayName": "Code Context",
+  "description": "Know what you're touching. Put the cursor in unfamiliar Python code and see what it does, how it's reached, why it exists and what breaks if you change it.",
+  "version": "0.1.0",
+  "publisher": "dhanyaaleena",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhanyaaleena/code-context.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dhanyaaleena/code-context/issues"
+  },
+  "homepage": "https://github.com/dhanyaaleena/code-context#readme",
+  "galleryBanner": {
+    "color": "#0d1014",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
+    "Programming Languages",
+    "Visualization",
     "Other"
   ],
+  "keywords": [
+    "python",
+    "context",
+    "onboarding",
+    "code understanding",
+    "call graph",
+    "git history",
+    "fastapi",
+    "flask",
+    "ai"
+  ],
+  "main": "./dist/extension.js",
+  "private": true,
   "activationEvents": [
     "onLanguage:python"
   ],
-  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
@@ -55,7 +81,7 @@
       }
     ],
     "configuration": {
-      "title": "Code Context (spike)",
+      "title": "Code Context",
       "properties": {
         "codeContext.codeLens": {
           "type": "boolean",
@@ -113,8 +139,11 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p .",
-    "watch": "tsc -watch -p .",
+    "vscode:prepublish": "npm run typecheck && node esbuild.js --production",
+    "compile": "npm run typecheck && node esbuild.js",
+    "typecheck": "tsc -p . --noEmit",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package --no-dependencies -o code-context.vsix",
     "sample": "node scripts/sample.js",
     "postinstall": "node scripts/sample.js"
   },
@@ -124,7 +153,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "2.32.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.4.5"
   }
 }

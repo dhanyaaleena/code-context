@@ -1,11 +1,19 @@
-.vscode/**
-.gitignore
+# Only dist/, media/, images/icon.png, README, LICENSE and package.json ship.
+# The extension is bundled by esbuild, so node_modules stays behind.
+node_modules/**
+out/**
 src/**
-**/*.map
-tsconfig.json
-sample/**
+.vscode/**
+docs/**
 fixtures/**
 scripts/**
-docs/**
+sample/**
+images/**
+!images/icon.png
+esbuild.js
+tsconfig.json
+.gitignore
+**/*.map
 **/*.pdf
+**/*.vsix
 **/.DS_Store
