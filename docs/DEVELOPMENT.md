@@ -172,6 +172,7 @@ src/lang/go.ts           Go pack: func/method/type symbols, package-aware resolu
 src/lang/goWorkflow.ts   Go body → steps (err checks fold into the call they guard)
 src/lang/goEntryPoints.ts  net/http, Gin, Echo, Chi, Gorilla mux, Fiber, Cobra, cron, gRPC, main
 src/lang/goSyntax.ts     masking of strings/comments, import parsing
+src/lang/blocks.ts       nesting for the step readers: which loop or condition each step sits in
 src/lsp.ts               callers, callees and symbols from the editor's language servers
 src/symbols.ts           symbols for any document: pack first, language server otherwise
 src/pythonScan.ts        Python symbols and calls by regex

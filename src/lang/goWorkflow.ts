@@ -1,3 +1,4 @@
+import { BlockTracker } from './blocks';
 import { Workflow, WorkflowInput, WorkflowStep } from '../types';
 import { dedupe, shorten } from '../workflow';
 import { CodeSymbol } from './types';
@@ -100,10 +101,10 @@ function humanGoCondition(raw: string): string {
 }
 
 /** The closing line of a block opened on `line`, by brace depth on masked text. */
-function blockEnd(masked: string[], line: number, limit: number): number {
+function blockEnd(masked: string[], line: number, limit: number, fromCol = 0): number {
   let depth = 0;
   for (let i = line; i <= limit; i++) {
-    for (const ch of masked[i]) {
+    for (const ch of i === line ? masked[i].slice(fromCol) : masked[i]) {
       if (ch === '{') {
         depth++;
       } else if (ch === '}') {
@@ -227,26 +228,11 @@ export function buildGoWorkflow(text: string, sym: CodeSymbol): Workflow {
   }
 
   const steps: WorkflowStep[] = [];
-  let pendingCondition: string | undefined;
-  // An `if` without a return colours the first step inside it. When its body
-  // holds no step (`subtotal -= discount`), say what it changes instead, so the
-  // condition can't leak onto whatever comes after the block.
-  let pendingEnd = -1;
-  let pendingFallback: string | undefined;
-  const flushPending = () => {
-    if (pendingCondition && pendingFallback) {
-      push({ kind: 'compute', label: pendingFallback, line: pendingEnd });
-    }
-    pendingCondition = undefined;
-    pendingFallback = undefined;
-  };
-  const push = (step: WorkflowStep) => {
-    if (pendingCondition && step.kind !== 'error' && step.kind !== 'return') {
-      step.label = `when ${pendingCondition}, ${step.label}`;
-    }
-    pendingCondition = undefined;
-    steps.push(step);
-  };
+  // Loops and conditions nest by their braces; see BlockTracker.
+  const tracker = new BlockTracker(steps);
+  const push = (step: WorkflowStep) => tracker.push(step);
+  /** `if cond { return }` followed by an else: the else runs "unless cond". */
+  let exitElse: string | undefined;
 
   const describeCall = (call: string, line: string, i: number): WorkflowStep | undefined => {
     let m: RegExpExecArray | null;
@@ -296,13 +282,32 @@ export function buildGoWorkflow(text: string, sym: CodeSymbol): Workflow {
     return { kind: 'call', label: verbaliseGo(call), line: i };
   };
 
+  const openLoop = (label: string, i: number) =>
+    tracker.open({ kind: 'loop', label: '', line: i, end: blockEnd(masked, i, sym.endLine) }, { kind: 'loop', label, line: i });
+
   let lastStep: WorkflowStep | undefined;
   for (let i = bodyStart + 1; i < sym.endLine; i++) {
     const m0 = masked[i];
     const l = orig[i];
     const t = m0.trim();
-    if (pendingCondition && i > pendingEnd) {
-      flushPending();
+    tracker.closeWhile((b) => (b.end ?? Infinity) < i);
+
+    // } else {   /   } else if cond {
+    const elseLine = /^\}\s*else\s*(?:if\s+(.+?)\s*)?\{\s*$/.exec(t);
+    if (elseLine) {
+      tracker.closeWhile((b) => (b.end ?? Infinity) <= i);
+      const prev = tracker.lastClosed;
+      const end = blockEnd(masked, i, sym.endLine, m0.indexOf('}') + 1);
+      if (elseLine[1]) {
+        const orig = /\belse\s+if\s+(.+?)\s*\{\s*$/.exec(l)?.[1] ?? elseLine[1];
+        tracker.open({ kind: 'if', label: `otherwise, if ${humanGoCondition(orig)}`, line: i, end });
+      } else if (prev && prev.kind === 'if' && prev.end === i) {
+        tracker.open({ kind: 'else', label: 'otherwise', line: i, end, pairOf: prev.id });
+      } else {
+        tracker.open({ kind: 'else', label: exitElse ?? 'otherwise', line: i, end });
+      }
+      exitElse = undefined;
+      continue;
     }
     if (!t || t === '}' || t === '{' || /^(defer|var|const)\b/.test(t) || /^case\b|^default:/.test(t)) {
       continue;
@@ -326,13 +331,16 @@ export function buildGoWorkflow(text: string, sym: CodeSymbol): Workflow {
       } else {
         push({ kind: 'error', label: outcome === 'stops' ? 'stops if something failed' : `${outcome} if something failed`, line: i });
       }
-      i = end;
+      exitElse = 'if it worked';
+      i = /^\s*\}\s*else\b/.test(masked[end]) ? end - 1 : end;
       continue;
     }
 
     // if <cond> { … return } — an early exit; otherwise the condition colours the next step
     const cond = /^if\s+(.+?)\s*\{\s*$/.exec(t);
     if (cond) {
+      // Masked text blanks string contents; the condition is read from the original.
+      cond[1] = /^\s*if\s+(.+?)\s*\{\s*$/.exec(l)?.[1] ?? cond[1];
       const end = blockEnd(masked, i, sym.endLine);
       const inner = masked.slice(i + 1, end).join('\n');
       if (/\breturn\b/.test(inner)) {
@@ -343,29 +351,41 @@ export function buildGoWorkflow(text: string, sym: CodeSymbol): Workflow {
           label: `${outcome === 'stops' ? 'stops early' : outcome} when ${humanGoCondition(cond[1])}${msg ? ` (“${shorten(msg, 36)}”)` : ''}`,
           line: i
         });
-        i = end;
+        exitElse = `unless ${humanGoCondition(cond[1])}`;
+        i = /^\s*\}\s*else\b/.test(masked[end]) ? end - 1 : end;
       } else {
-        pendingCondition = humanGoCondition(cond[1]);
-        pendingEnd = end;
+        // The body is read as usual, nested under "if …". With nothing in it
+        // worth a step (`subtotal -= discount`), say what it changes instead.
+        const human = humanGoCondition(cond[1]);
         const change = /^\s*(\w+)(?:\.(\w+))?\s*([-+*/]?)=[^=]/m.exec(inner);
-        pendingFallback = change
-          ? `${change[3] === '-' || change[3] === '/' ? 'reduces' : change[3] ? 'increases' : 'sets'} ${pluralGo(change[2] ?? change[1])}`
-          : undefined;
+        tracker.open({
+          kind: 'if',
+          label: `if ${human}`,
+          line: i,
+          end,
+          fallback: change
+            ? {
+                kind: 'compute',
+                label: `when ${human}, ${change[3] === '-' || change[3] === '/' ? 'reduces' : change[3] ? 'increases' : 'sets'} ${pluralGo(change[2] ?? change[1])}`,
+                line: i
+              }
+            : undefined
+        });
       }
       continue;
     }
 
     let m: RegExpExecArray | null;
     if ((m = /^for\s+(?:[\w, ]+:?=\s*)?range\s+([\w.()[\]]+)\s*\{/.exec(t))) {
-      push({ kind: 'loop', label: `goes through each ${pluralGo(m[1].split('.').pop()!.replace(/\(\)$/, ''))}`, line: i });
+      openLoop(`goes through each ${pluralGo(m[1].split('.').pop()!.replace(/\(\)$/, ''))}`, i);
       continue;
     }
     if (/^for\s*\{/.test(t)) {
-      push({ kind: 'loop', label: 'repeats until stopped', line: i });
+      openLoop('repeats until stopped', i);
       continue;
     }
     if ((m = /^for\s+(.+?)\s*\{/.exec(t))) {
-      push({ kind: 'loop', label: `repeats while ${shorten(m[1], 36)}`, line: i });
+      openLoop(`repeats while ${shorten(m[1], 36)}`, i);
       continue;
     }
     if ((m = /^switch\s*(.*?)\s*\{/.exec(t))) {
@@ -456,15 +476,13 @@ export function buildGoWorkflow(text: string, sym: CodeSymbol): Workflow {
     }
   }
 
-  if (pendingCondition) {
-    flushPending();
-  }
+  tracker.closeWhile(() => true);
 
   return {
     trigger,
     requires: [...requires],
     inputs,
-    steps: dedupe(steps).slice(0, 14),
+    steps: dedupe(steps).slice(0, 24),
     confidence: 'heuristic'
   };
 }

@@ -32,9 +32,12 @@ flagged in red.
 
 Then four sections, collapsed until you want them. Each remembers whether you left it open.
 
-- **What it does** — the function's steps as a timeline, read from its body and put into plain words.
-  The dot colours mean *reads or calls*, *changes data*, *can fail* and *returns*, with a key underneath.
-  Click a step to jump to that line.
+- **What it does** — a flowchart of the function in plain words — "If a vector has text, adds it to the
+  results" rather than the code's `if`s and loops. Every way it can fail branches off in red
+  (`✕ 404 · No such user`), and early returns in grey. With AI on, related steps are grouped into a handful of stages, each one
+  sentence, so a long function still reads at a glance — **Break it down** shows every step again; without it, long lists fold after the first few
+  steps. A box's coloured edge means *reads or calls*, *changes data* or *returns*; logging is left out.
+  Click a box to jump to its code; hover to see the steps inside it.
 - **How it got here** — why the function was built, from the commit that first introduced it, and how
   that has changed since. When no commit gave a reason, it's marked *inferred*. Below it, the commit
   history as a timeline, with the introducing commit marked *added here* — click any commit to see its diff.
@@ -58,39 +61,29 @@ That's it for the computed view. Nothing leaves your machine.
 
 ### Optional: turn on AI descriptions
 
-Everything above works without AI. To add the plain-language descriptions, do three things.
+Everything above works without AI. Until it's set up, the panel shows a **Set up AI** button. To add the
+plain-language descriptions:
 
-**1. Open your settings file.** Press <kbd>⇧⌘P</kbd> (<kbd>Ctrl+Shift+P</kbd> on Windows/Linux) and run
-**Preferences: Open User Settings (JSON)**.
+**Add your API key.** Press <kbd>⇧⌘P</kbd> (<kbd>Ctrl+Shift+P</kbd> on Windows/Linux) and run
+**Code Context: Set API key** — or click **Set up AI** in the panel. Three quick choices:
 
-**2. Paste these two lines** inside the outer `{ }`:
+1. **Provider** — Anthropic, Google, OpenAI or xAI.
+2. **Model** — the cheapest is listed first and marked *Recommended*; it's plenty for plain-language
+   descriptions.
+3. **Key** — paste it. If one is already saved, leave the box empty to keep it.
 
-```json
-"codeContext.ai.enabled": true,
-"codeContext.ai.model": "claude-haiku-4-5"
-```
+That's all — it turns AI descriptions on and saves your choice to `codeContext.ai.enabled` and
+`codeContext.ai.model`. Run it again any time to switch model or provider.
 
-`claude-haiku-4-5` is only an example — it's the default, from Anthropic. Use whichever provider you have
-access to:
+| Provider | Recommended (cheapest) | Also offered | Where keys come from |
+|---|---|---|---|
+| **Anthropic** (Claude) | `claude-haiku-4-5` | `claude-sonnet-5`, `claude-opus-5` | **console.anthropic.com** → API keys. Create the key inside a *workspace*, not at organisation level, or requests are rejected. |
+| **Google** (Gemini) | `gemini-2.5-flash` | `gemini-3.5-flash`, `gemini-3.6-flash`, `gemini-flash-latest` | **aistudio.google.com** → Get API key (starts with `AIza`) |
+| **OpenAI** (GPT) | `gpt-6-luna` | `gpt-6-sol`, `gpt-6-astra` | **platform.openai.com** → API keys |
+| **xAI** (Grok) | `grok-build-0.1` | `grok-4.7` | **console.x.ai** → API keys |
 
-| If you use | Set `codeContext.ai.model` to | What you need |
-|---|---|---|
-| **Anthropic** (Claude) | `claude-haiku-4-5` — cheapest, the default · or `claude-sonnet-5`, `claude-opus-5` | An Anthropic API key |
-| **Google** (Gemini) | `gemini-3.6-flash` · or `gemini-3.5-flash`, `gemini-2.5-flash` | A Google AI Studio key (starts with `AIza`) |
-| **OpenAI** (GPT) | `gpt-6-luna` — cheapest · or `gpt-6-sol`, `gpt-6-astra` | An OpenAI API key |
-| **xAI** (Grok) | `grok-4.7` · or `grok-build-0.1` | An xAI API key |
-| **GitHub Copilot** (VS Code only) | `vscode-lm` | No key — approve the consent prompt the first time |
-
-If VS Code underlines something in red, a comma is usually missing on the line above.
-
-**3. Add your API key** (skip this for Copilot). Run **Code Context: Set API key** from the command
-palette, choose the provider, and paste the key.
-
-- Anthropic keys come from **console.anthropic.com** → API keys. Create the key inside a *workspace*,
-  not at organisation level, or requests are rejected.
-- Google keys come from **aistudio.google.com** → Get API key.
-- OpenAI keys come from **platform.openai.com** → API keys.
-- xAI keys come from **console.x.ai** → API keys.
+You can also edit `"codeContext.ai.model"` in **Preferences: Open User Settings (JSON)**. **GitHub Copilot** (VS Code only) needs no key: set it to `"vscode-lm"` and
+`"codeContext.ai.enabled"` to `true`, then approve the consent prompt the first time.
 
 Open the panel on any function and the description appears within a few seconds.
 
@@ -114,7 +107,7 @@ Click **Re-analyse** when you're ready.
 |---|---|
 | Show context panel | Open the panel for the function at the cursor |
 | Re-analyse this function | Rebuild and ask the AI again |
-| Set API key | Store an Anthropic, Google, OpenAI or xAI key |
+| Set API key | Choose a provider and model and store its key — also turns AI on |
 | List editor models | What your editor offers extensions (e.g. Copilot) |
 | Clear AI narration cache | Forget saved descriptions |
 | Re-index workspace | Rebuild the index from scratch |

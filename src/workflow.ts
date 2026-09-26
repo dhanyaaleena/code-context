@@ -1,3 +1,4 @@
+import { BlockTracker } from './lang/blocks';
 import { PySymbol } from './pythonScan';
 import { Workflow, WorkflowStep, WorkflowInput } from './types';
 
@@ -24,6 +25,8 @@ const APPEND_RE = /^\s*(\w+)\.(append|extend|add)\s*\(/;
 const CALL_RE = /^([\w.]+)\s*\(/;
 const LOOKUP_RE = /^[\w.]+\s*(?:\.get\s*\(|\[)/;
 const BARE_CALL_RE = /^\s*([a-z_][\w.]*)\s*\(/;
+/** Logging and prints: diagnostics, not something the function does for anyone. */
+const LOG_RE = /^\s*(?:(?:self\.|cls\.)?(?:logger|_logger|log|logging|LOGGER|LOG)\s*\.\s*(?:debug|info|warning|warn|error|exception|critical|log)|print|warnings\.warn|traceback\.print_exc)\s*\(/;
 
 const COMMIT_RE = /\.(commit|flush|save)\s*\(/;
 const ADD_RE = /\.(add|add_all|bulk_save_objects)\s*\(\s*(\w+)?/;
@@ -154,6 +157,7 @@ export function buildWorkflow(
     sigDepth += (l.match(/\(/g) ?? []).length - (l.match(/\)/g) ?? []).length;
     bodyStart++;
   } while (sigDepth > 0 && bodyStart <= sym.endLine);
+  const tracker = new BlockTracker(steps);
   /** What each `except` clause ends up doing, folded into its own step. */
   const handlerOutcomes = new Map<WorkflowStep, string[]>();
   let pendingCondition: string | undefined;
@@ -164,10 +168,33 @@ export function buildWorkflow(
     if (!line.trim() || /^\s*("""|''')/.test(line)) {
       continue;
     }
+    // Indentation is nesting: a line at or left of a block's header closes it.
+    const indent = line.length - line.trimStart().length;
+    tracker.closeWhile((b) => (b.indent ?? -1) >= indent);
+    if (/^\s*else\s*:\s*$/.test(line)) {
+      const cond = tracker.lastClosed;
+      if (cond && cond.kind === 'if' && cond.indent === indent) {
+        tracker.open({ kind: 'else', label: 'otherwise', line: i, indent, pairOf: cond.id });
+      }
+      pendingCondition = undefined;
+      continue;
+    }
+    // Skipped without touching pendingCondition: under `if not rows:` a log line
+    // followed by a raise is the raise's condition, not the log's.
+    if (LOG_RE.test(line)) {
+      continue;
+    }
 
     const cond = IF_RE.exec(line);
     if (cond) {
       pendingCondition = cond[1].trim();
+      const elif = /^\s*elif\b/.test(line);
+      tracker.open({
+        kind: 'if',
+        label: `${elif ? 'otherwise, if' : 'if'} ${humanCondition(pendingCondition)}`,
+        line: i,
+        indent
+      });
       continue;
     }
 
@@ -197,14 +224,15 @@ export function buildWorkflow(
       // `raise he` outside a handler is the same error travelling on, not a
       // new failure. Labelling it "fails (he)" told the reader nothing at all.
       if (!raise[2].trim() && /^[a-z_]{1,4}$/.test(raise[1])) {
-        steps.push({ kind: 'error', label: 'passes the original error on', detail: line.trim(), line: i });
+        tracker.push({ kind: 'error', label: 'passes the original error on', detail: line.trim(), line: i });
         pendingCondition = undefined;
         continue;
       }
       const status = STATUS_RE.exec(line)?.[1];
-      const detail = DETAIL_RE.exec(line)?.[1];
+      // `detail="…"` for HTTPException; otherwise the first string argument — ValueError("unknown namespace").
+      const detail = DETAIL_RE.exec(line)?.[1] ?? /\(\s*f?['"]([^'"{}]{2,80})['"]/.exec(raise[2] ? `(${raise[2]}` : '')?.[1];
       const why = pendingCondition ? `when ${humanCondition(pendingCondition)}` : undefined;
-      steps.push({
+      tracker.push({
         kind: 'error',
         label: `fails${status ? ` with ${status}` : `: ${humanExc(raise[1])}`}${why ? ` ${why}` : ''}`,
         detail: detail ?? raise[1],
@@ -222,7 +250,7 @@ export function buildWorkflow(
       const guarded = pendingCondition
         ? `stops early when ${humanCondition(pendingCondition)}, returning ${shorten(value, 30)}`
         : `returns ${value}`;
-      steps.push({ kind: pendingCondition ? 'branch' : 'return', label: guarded, detail: line.trim(), line: i });
+      tracker.push({ kind: pendingCondition ? 'branch' : 'return', label: guarded, detail: line.trim(), line: i });
       pendingCondition = undefined;
       continue;
     }
@@ -242,7 +270,7 @@ export function buildWorkflow(
         prev.label = handlerLabel(prev.caught, handlerOutcomes.get(prev) ?? []);
         continue;
       }
-      steps.push({
+      tracker.push({
         kind: 'branch',
         label: handlerLabel([exc[1]], []),
         detail: line.trim(),
@@ -253,9 +281,10 @@ export function buildWorkflow(
     }
     const loop = FOR_RE.exec(line);
     if (loop) {
-      steps.push({
+      tracker.open({ kind: 'loop', label: '', line: i, indent }, {
         kind: 'loop',
-        label: `goes through each ${shorten(loop[2].replace(/[():]/g, '').trim(), 30)}`,
+        // `for batch in chunks(ids, 10)` is about batches; `for u in users` about users.
+        label: `goes through each ${/\(/.test(loop[2]) ? plural(loop[1].split(',').pop()!.trim()) : shorten(plural(loop[2].trim().split('.').pop()!), 30)}`,
         detail: line.trim(),
         line: i
       });
@@ -275,7 +304,7 @@ export function buildWorkflow(
       const filter = FILTER_RE.exec(line)?.[2]?.trim();
       const into = ASSIGN_RE.exec(line)?.[1];
       const what = name ?? (into ? plural(into) : undefined);
-      steps.push({
+      tracker.push({
         kind: 'read',
         label: what
           ? `looks up ${what}${filter ? ` by ${shorten(filter, 34)}` : ''}`
@@ -289,16 +318,16 @@ export function buildWorkflow(
 
     const add = ADD_RE.exec(line);
     if (add) {
-      steps.push({ kind: 'write', label: `adds ${add[2] ?? 'a record'}`, detail: line.trim(), line: i });
+      tracker.push({ kind: 'write', label: `adds ${add[2] ?? 'a record'}`, detail: line.trim(), line: i });
       continue;
     }
     const del = DELETE_RE.exec(line);
     if (del) {
-      steps.push({ kind: 'write', label: `deletes ${del[1] ?? 'a record'}`, detail: line.trim(), line: i });
+      tracker.push({ kind: 'write', label: `deletes ${del[1] ?? 'a record'}`, detail: line.trim(), line: i });
       continue;
     }
     if (COMMIT_RE.test(line)) {
-      steps.push({ kind: 'write', label: 'saves the change', detail: line.trim(), line: i });
+      tracker.push({ kind: 'write', label: 'saves the change', detail: line.trim(), line: i });
       continue;
     }
 
@@ -308,7 +337,7 @@ export function buildWorkflow(
       const [, target, rhs] = assign;
       const computed = describeAssignment(target, rhs);
       if (computed) {
-        steps.push({ kind: computed.kind, label: computed.label, detail: line.trim(), line: i });
+        tracker.push({ kind: computed.kind, label: computed.label, detail: line.trim(), line: i });
         pendingCondition = undefined;
         continue;
       }
@@ -317,7 +346,7 @@ export function buildWorkflow(
       const called = CALL_RE.exec(rhs)?.[1];
       if (called && !BUILTIN_CALLS.has(called.split('.').pop() ?? '')) {
         const store = describeStoreAccess(called, rhs, target);
-        steps.push(
+        tracker.push(
           store
             ? { kind: 'read', label: store, detail: line.trim(), line: i }
             : { kind: 'call', label: verbalise(called), detail: line.trim(), line: i }
@@ -326,7 +355,7 @@ export function buildWorkflow(
         continue;
       }
       if (LOOKUP_RE.test(rhs)) {
-        steps.push({ kind: 'read', label: `looks up ${plural(target)}`, detail: line.trim(), line: i });
+        tracker.push({ kind: 'read', label: `looks up ${plural(target)}`, detail: line.trim(), line: i });
         pendingCondition = undefined;
         continue;
       }
@@ -334,21 +363,21 @@ export function buildWorkflow(
 
     const bare = BARE_CALL_RE.exec(line);
     if (bare && !BUILTIN_CALLS.has(bare[1].split('.').pop() ?? '')) {
-      steps.push({ kind: 'call', label: verbalise(bare[1]), detail: line.trim(), line: i });
+      tracker.push({ kind: 'call', label: verbalise(bare[1]), detail: line.trim(), line: i });
       pendingCondition = undefined;
       continue;
     }
 
     const app = APPEND_RE.exec(line);
     if (app) {
-      steps.push({ kind: 'compute', label: `adds to ${plural(app[1])}`, detail: line.trim(), line: i });
+      tracker.push({ kind: 'compute', label: `adds to ${plural(app[1])}`, detail: line.trim(), line: i });
       pendingCondition = undefined;
       continue;
     }
 
     const set = ATTR_SET_RE.exec(line);
     if (set && !set[1].match(/^(self|cls)$/)) {
-      steps.push({
+      tracker.push({
         kind: 'write',
         label: `sets ${set[2]} to ${shorten(set[3], 30)}`,
         detail: line.trim(),
@@ -362,7 +391,7 @@ export function buildWorkflow(
     trigger: routePath,
     requires,
     inputs,
-    steps: dedupe(steps).slice(0, 14),
+    steps: dedupe(steps).slice(0, 24),
     confidence: 'heuristic'
   };
 }

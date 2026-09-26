@@ -12,8 +12,10 @@
   const vscode = acquireVsCodeApi();
   const root = document.getElementById('root');
 
-  /** Boxes per row before the rest collapse into "+N more". Two fit a sidebar legibly. */
-  const MAX_NODES = 2;
+  /** Without the model's stages, a flow longer than this folds its tail away. */
+  const MAX_FLOW = 7;
+  /** The map never grows wider than this, however wide the panel. */
+  const MAP_MAX = 520;
   let narration = null;
   let lastCtx = null;
   let open = { steps: false, history: false, touches: false, evidence: false };
@@ -21,12 +23,15 @@
   let spinning = false;
   /** The function's code changed after this was analysed. */
   let stale = false;
+  /** "Break it down": every computed step instead of the model's stages. Remembered. */
+  let everyStep = false;
 
   const saved = vscode.getState();
   if (saved) {
     lastCtx = saved.ctx || null;
     narration = saved.narration || null;
     open = Object.assign(open, saved.open || {});
+    everyStep = !!saved.everyStep;
     stale = !!saved.stale;
     if (lastCtx) {
       render(lastCtx);
@@ -69,14 +74,29 @@
     }
   });
 
+  // The map is drawn at real pixel size, so a resized panel redraws it.
+  let lastWidth = 0;
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const w = root.clientWidth;
+      if (lastCtx && Math.abs(w - lastWidth) > 24) {
+        render(lastCtx);
+      }
+    }, 150);
+  });
+
   function persist() {
-    vscode.setState({ ctx: lastCtx, narration, open, stale });
+    vscode.setState({ ctx: lastCtx, narration, open, stale, everyStep });
   }
 
   function render(ctx) {
     persist();
+    lastWidth = root.clientWidth;
     root.innerHTML = [headline(ctx), journey(ctx), stats(ctx), sections(ctx)].join('');
     wire(ctx);
+    requestAnimationFrame(syncPulse);
   }
 
   /**
@@ -92,7 +112,6 @@
       return '';
     }
     return `<div class="ai-inline pending">
-      <span class="aitag">AI is analysing</span>
       <p class="why" style="margin:0">${esc(what)}</p>
     </div>`;
   }
@@ -134,7 +153,21 @@
           : narration && narration.state === 'error'
             ? `No description — ${narration.reason}`
             : ctx.summary;
-      return `${ident}${staleBar}<div class="ai pending"><p class="lead">${esc(note)}</p></div>`;
+      // Not set up yet — no key, AI never turned on. Only then; a request
+      // that failed says why and offers Try again instead.
+      if (narration && narration.state === 'setup') {
+        return `${ident}${staleBar}<div class="ai setup">
+          <p class="setup-text">Add an API key to see this function explained in everyday words.</p>
+          <p class="setup-act"><button class="setupbtn" data-setup>Set up AI</button>
+            <span class="setup-alt">or ${/Mac/.test(navigator.platform) ? '⇧⌘P' : 'Ctrl+Shift+P'} → <i>Code Context: Set API key</i></span></p>
+        </div><p class="plainsum">${esc(ctx.summary)}</p>`;
+      }
+      // An error is not "still working": no pulse, and a way to ask again.
+      const failed = narration && narration.state === 'error';
+      const loading = narration && narration.state === 'loading';
+      return `${ident}${staleBar}<div class="ai ${failed ? 'failed' : loading ? 'pending' : 'plain'}"><p class="lead">${esc(note)}</p>${
+        failed ? `<button class="linkbtn retry" data-retry>Try again</button>` : ''
+      }</div>`;
     }
 
     return `${ident}${staleBar}
@@ -257,16 +290,18 @@
       loop: 'loops',
       branch: 'branches',
       write: 'writes',
-      error: 'can fail',
       return: 'returns',
       guard: 'checks'
     };
-    const shape = w.steps
-      .map((st) => WORD[st.kind])
+    const all = buildFlow(w.steps, shownStages(), plainSteps(w));
+    const exits = all.reduce((n, node) => n + node.exits.filter((x) => !x.calm).length, 0);
+    const shape = all
+      .map((node) => WORD[node.kind])
       .filter((v, i, a) => v && a.indexOf(v) === i)
-      .slice(0, 3)
+      .slice(0, 2)
       .join(', ');
-    return `${w.steps.length} step${w.steps.length === 1 ? '' : 's'} · ${shape}`;
+    const main = `${all.length} step${all.length === 1 ? '' : 's'}`;
+    return exits ? `${main} · ${exits} way${exits === 1 ? '' : 's'} to fail` : `${main}${shape ? ` · ${shape}` : ''}`;
   }
 
   function stepsBody(ctx) {
@@ -274,10 +309,8 @@
     if (!w || (!w.steps.length && !w.requires.length)) {
       return '';
     }
-    const plain =
-      narration && narration.state === 'ready' && (narration.steps || []).length === w.steps.length
-        ? narration.steps
-        : [];
+    const grouped = readyStages();
+    const stages = shownStages();
     const needs = narration && narration.state === 'ready' ? narration.needs : '';
 
     const meta = needs
@@ -295,33 +328,256 @@
             : ''
         ].join('');
 
-    const steps = w.steps
-      .map(
-        (st, i) => `<li class="hit" data-file="${esc(ctx.symbol.file)}" data-line="${st.line}"
-                        title="Step ${i + 1} · line ${st.line + 1}">
-          <span class="dot ${KIND_CLASS[st.kind] || 'k-flow'}"></span>
-          <span class="txt">${esc(plain[i] || st.label)}</span>
-        </li>`
-      )
-      .join('');
+    const plain = plainSteps(w);
+    const flow = buildFlow(w.steps, stages, plain);
+    const file = esc(ctx.symbol.file);
+    // Without stages a long function is still a long list: show the start and
+    // fold the rest behind one row, so the section stays a glance.
+    const cap = stages.length || everyStep ? flow.length : flow.length > MAX_FLOW ? MAX_FLOW - 1 : flow.length;
+    const steps =
+      renderFlow(flow, file, cap) +
+      (cap < flow.length
+        ? `<li class="fc-more"><div class="fc-row"><span class="fc-node" data-expand>+${flow.length - cap} more steps</span></div></li>`
+        : '');
     // Only the colours actually used get a key, so a function that never
     // writes doesn't carry a "changes data" entry nobody needs to learn.
-    const used = new Set(w.steps.map((st) => KIND_CLASS[st.kind]).filter(Boolean));
+    const used = new Set(flow.map((node) => KIND_CLASS[node.kind]).filter(Boolean));
+    used.delete('k-error');
     const key = KEY.filter(([cls]) => used.has(cls));
-    const keyHtml = key.length
-      ? `<div class="key">${key.map(([cls, word]) => `<span class="${cls}">${esc(word)}</span>`).join('')}</div>`
+    // Grouped into stages, the exact steps are one click away — and back.
+    const toggle = grouped.length && grouped.some((g) => g.to > g.from)
+      ? `<button class="linkbtn fc-toggle" data-every-step>${
+          everyStep ? 'Show grouped' : `Break it down · ${buildFlow(w.steps, [], plain).length} steps`
+        }</button>`
+      : '';
+    const keyHtml = key.length || toggle
+      ? `<div class="key">${key.map(([cls, word]) => `<span class="${cls}">${esc(word)}</span>`).join('')}${toggle}</div>`
       : '';
 
-    const body = `${meta}${steps ? `<ol class="tl">${steps}</ol>` : ''}${keyHtml}`;
+    const chart = `${steps ? `<div class="fcwrap"><ol class="fc">${steps}</ol></div>` : ''}${keyHtml}`;
     const pending = aiPending('unpacking the steps…');
     if (pending) {
-      return `${pending}${body}`;
+      return `${pending}${meta}${chart}`;
     }
+
+    // The model answered but its plain-language steps didn't come through —
+    // or only some did. Say so, so code-like lines aren't mistaken for its
+    // answer, and offer to ask again.
+    const ready = narration && narration.state === 'ready';
+    const unsaid = w.steps.filter((st, i) => !st.header && !plain[i]).length;
+    const missing = ready && w.steps.length && !stages.length && (!plain.length || (everyStep || !grouped.length) && unsaid > 0);
+    const fallback = missing
+      ? `<div class="fallback">${
+          plain.length
+            ? `${unsaid} step${unsaid === 1 ? ' is' : 's are'} shown as read from the code — the plain-language version didn't come through for ${unsaid === 1 ? 'it' : 'them'}.`
+            : "These steps are shown as read from the code — the plain-language version didn't come through this time."
+        } <button class="linkbtn" data-retry>Try again</button></div>`
+      : '';
+
     // Same rule as the headline block: if a model wrote the words, the amber
-    // rule marks them. The step numbers and order are still computed.
-    return plain.length || needs
-      ? `<div class="ai-inline">${body}</div>`
-      : body;
+    // rule marks them. Steps it didn't write sit outside the rule.
+    const aiWroteSteps = stages.length || (plain.length && !missing);
+    if (aiWroteSteps) {
+      return `<div class="ai-inline">${meta}${chart}</div>`;
+    }
+    return `${needs ? `<div class="ai-inline">${meta}</div>` : meta}${fallback}${chart}`;
+  }
+
+  /** The flowchart: one box per step or stage, joined by arrows, exits to the right. */
+  function renderFlow(nodes, file, cap = nodes.length) {
+    return nodes
+      .map((n, i) => `<li class="${i >= cap ? 'extra' : ''}">${flowRow(n, file)}</li>`)
+      .join('');
+  }
+
+  function flowRow(node, file) {
+    const exits = node.exits
+      .map((x) => `<span class="exit${x.calm ? ' calm' : ''} hit" data-file="${file}" data-line="${x.line}" title="${esc(x.full)}">${esc(x.text)}</span>`)
+      .join('');
+    const kind = KIND_CLASS[node.kind] || 'k-flow';
+    const box = node.line === undefined
+      ? `<span class="fc-node ${kind}">${esc(node.text)}</span>`
+      : `<span class="fc-node ${kind} hit" data-file="${file}" data-line="${node.line}" title="${esc(node.full)}">${esc(node.text)}</span>`;
+    return `<div class="fc-row${exits ? ' has-exit' : ''}">${box}${
+      exits ? `<span class="fc-branch"></span><span class="exits">${exits}</span>` : ''
+    }</div>`;
+  }
+
+  /** The stages to draw: none when the reader asked to see every step. */
+  function shownStages() {
+    return everyStep ? [] : readyStages();
+  }
+
+  /** The model's stages, when it gave some that check out for these steps. */
+  function readyStages() {
+    return narration && narration.state === 'ready' && Array.isArray(narration.stages) ? narration.stages : [];
+  }
+
+  /** The model's plain line for each step, when it gave them. */
+  function plainSteps(w) {
+    const p = narration && narration.state === 'ready' && Array.isArray(narration.steps) ? narration.steps : [];
+    return p.length === w.steps.length ? p : [];
+  }
+
+  /**
+   * Steps — or the model's stages of them — as a flat run of boxes. Nesting is
+   * not drawn: with the model's words, a condition or loop is said inside the
+   * sentence ("For every vector, notes its ID"), so the lines that only open
+   * one are left out rather than shown as code.
+   */
+  function buildFlow(steps, stages, plain = []) {
+    const units = stages.length
+      ? stages.map((g) => ({ from: g.from, to: g.to, text: g.text }))
+      : steps.map((_, i) => ({ from: i, to: i, text: plain[i] || '' }));
+    const nodes = [];
+    for (const u of units) {
+      const members = steps.slice(u.from, u.to + 1);
+      if (!members.length) {
+        continue;
+      }
+      if (!stages.length && plain.length && members[0].header) {
+        continue;
+      }
+      const node = nodeOf(members, u.text, nodes, members.map((_, k) => plain[u.from + k] || ''));
+      if (node) {
+        nodes.push(node);
+      }
+    }
+    return nodes;
+  }
+
+  /**
+   * One box for a group of steps. Its failures — error steps, and the "…, or
+   * answers 400 if that fails" folded into its other steps — become its exits.
+   * A group that is only failures branches off the box before it; at the very
+   * top it becomes a check of its own. Returns null when it was attached that way.
+   */
+  function nodeOf(members, words, before, own = []) {
+    const exits = [];
+    const main = [];
+    members.forEach((st, k) => {
+      // The model's line for this very step, else the group's when it is the only one.
+      const said = own[k] || (members.length === 1 ? words : '');
+      if (st.kind === 'error') {
+        // Python keeps the raise's message in detail; it says more than the exception's name.
+        const message = st.detail && /\s/.test(st.detail) && !/[=(){}]/.test(st.detail) ? st.detail : '';
+        exits.push({ text: exitText(st.label, said || message), full: st.label, line: st.line });
+        return;
+      }
+      // An early return that isn't a failure — "stops early when ids is
+      // missing, returning []" — branches off too, in grey rather than red.
+      const early = /^stops early when (.+?)(?:, returning (.+))?$/.exec(st.label);
+      if (early) {
+        exits.push({
+          text: said
+            ? clip(said.replace(/[.]$/, ''), 44)
+            : `${early[2] ? `returns ${clip(early[2], 16)}` : 'stops'} · ${clip(early[1], 30)}`,
+          full: st.label,
+          line: st.line,
+          calm: true
+        });
+        return;
+      }
+      // Python's handler step — "handles A or B, or any other error — passes
+      // it on or answers 401 or answers 500": its outcomes are exits.
+      const handler = /^handles (.+?) — (.+)$/.exec(st.label);
+      if (handler) {
+        handler[2].split(/ or (?=answers|passes|fails|stops|returns)/).forEach((o) =>
+          exits.push({ text: exitText(o), full: st.label, line: st.line })
+        );
+        const caught = handler[1].replace(/, or any other error$/, '').split(/,? or |, /).filter(Boolean);
+        main.push({ st, text: caught.length === 1 && !/any other error/.test(handler[1]) ? `Catches ${caught[0]}` : 'Catches errors' });
+        return;
+      }
+      const folded = /^(.*?),? or (.+?) if that fails$/.exec(st.label);
+      if (folded) {
+        exits.push({ text: exitText(folded[2]), full: st.label, line: st.line });
+      }
+      const text = folded ? folded[1] : st.label;
+      // A loop heads its body as "for each id" — singular, like the code's own variable.
+      const loopText = text.replace(/^goes through each (\S+)/, (_, w) =>
+        `for each ${w.length > 2 ? w.replace(/ies$/, 'y').replace(/([^s])s$/, '$1') : w}`
+      );
+      main.push({ st, text: st.header && st.header.kind === 'loop' ? loopText : text });
+    });
+
+    const detail = members.map((st) => `• ${st.label}  (line ${st.line + 1})`).join('\n');
+    if (!main.length) {
+      let host = before[before.length - 1];
+      if (!host) {
+        host = { kind: 'guard', text: checkText(members[0].label), full: detail, line: members[0].line, exits: [] };
+        before.push(host);
+      }
+      host.exits.push(...exits);
+      return null;
+    }
+    const kinds = main.map((m) => m.st.kind);
+    const kind = kinds.includes('write')
+      ? 'write'
+      : kinds[kinds.length - 1] === 'return' && kinds.length === 1
+        ? 'return'
+        : kinds.find((k) => k !== 'return') || kinds[0];
+    return {
+      kind,
+      text: sentence(words || main[0].text),
+      full: words ? `${words}\n${detail}` : detail,
+      line: main[0].st.line,
+      exits
+    };
+  }
+
+  /** "answers 409 when the error is ErrOutOfStock (“out of stock”)" → "409 · out of stock". */
+  function exitText(label, words) {
+    const l = String(label);
+    const code = /\b(?:answers|with|returns?)\s+([1-5]\d\d)\b/.exec(l) || /\b([45]\d\d)\b/.exec(l);
+    const verb = code
+      ? code[1]
+      : /^crash|panic/.test(l)
+        ? 'crashes'
+        : /passes (?:the error|it) on/.test(l)
+          ? 'passes error on'
+          : /^fails/.test(l)
+            ? 'fails'
+            : 'stops';
+    const quoted = /[“"]([^”"]{2,})[”"]/.exec(l);
+    const failsWith = /^fails:\s*(.+?)(?:\s+when\s|$)/.exec(l);
+    const when = /\bwhen\s+(.+?)(?:\s*\(|$)/.exec(l);
+    // The model's words for a failure ("Card declined") beat the code's condition.
+    // Models like to prefix "Return error:"; the chip is already an error.
+    const said = words
+      ? words.replace(/[.]$/, '').replace(/^(?:stops?|fails?|exits?|bails? out|gives? up)\s+(?:early\s+)?(?:if|when)\s+/i, '').replace(/^(?:returns?|raises?|throws?|sends?(?: back)?|responds? with|answers? with)\s+(?:an?\s+)?(?:\d{3}\s+)?(?:error|exception)?\s*[:—-]?\s*/i, '')
+      : '';
+    let reason = said ? said : quoted ? quoted[1] : failsWith ? failsWith[1] : when ? when[1] : '';
+    reason = reason.replace(/^the error is\s+/, '').replace(/\s+/g, ' ').trim();
+    return reason ? `${verb} · ${clip(reason, 34)}` : verb;
+  }
+
+  /** "stops early when req.CustomerID == 0" → "Checks customer ID". */
+  function checkText(label) {
+    const cond = /\bwhen\s+(.+?)(?:\s*\(|$)/.exec(String(label));
+    const subject = cond && /(?:not\s+)?([A-Za-z_][\w.]*)/.exec(cond[1].replace(/^(?:not|no)\s+/, ''));
+    if (!subject) {
+      return 'Checks the input';
+    }
+    // `index.has_namespace` is a check on the namespace.
+    return `Checks ${humanName(subject[1].split('.').pop().replace(/^(?:has|is|can)_(?=\w)/, ''))}`;
+  }
+
+  /** `CustomerID`, `customer_id`, `customerId` → "customer ID". */
+  function humanName(id) {
+    return String(id)
+      .replace(/_/g, ' ')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .split(' ')
+      .map((w) => (/^(id|url|uri|ip|api|csv|sku)$/i.test(w) ? w.toUpperCase() : w.toLowerCase()))
+      .join(' ')
+      .trim();
+  }
+
+  function sentence(t) {
+    const s = String(t).trim();
+    return s ? s[0].toUpperCase() + s.slice(1) : s;
   }
 
   /* -- how it got here -- */
@@ -421,7 +677,7 @@
     }
 
     const list = (title, items) =>
-      items.length > MAX_NODES
+      items.length > mapFits(items.length)
         ? `<details class="more"><summary>${esc(title)} (${items.length})</summary><ul>${items
             .map(
               (c) => `<li class="hit" data-file="${esc(c.file)}" data-line="${c.line}">
@@ -441,107 +697,115 @@
 
   /**
    * The navigable map. Callers above, this symbol in the middle, what it calls
-   * below — every box is a jump. Reading the shape is the point; the lists under
-   * it only appear when there are too many boxes to draw.
+   * below — every box is a jump. Drawn at the panel's real pixel size, never
+   * stretched: text stays the size of the text around it however wide the
+   * panel is, and the graph stops growing past MAP_MAX.
    */
   function mapSvg(ctx, callers, calls) {
-    const W = 352;
-    const BOX_H = 38;
-    const GAP = 8;
+    const W = Math.round(Math.max(240, Math.min(MAP_MAX, (root.clientWidth || 360) - 2)));
+    const BOX_H = 34;
+    const BOX_MAX = 168;
+    const GAP = 10;
+    const ROW_GAP = 30;
+    // As many boxes per row as fit at a readable width, then "+N more".
+    const perRow = mapPerRow(W);
 
-    const up = callers.slice(0, MAX_NODES);
-    const upHidden = callers.length - up.length;
-    const down = calls.slice(0, MAX_NODES);
-    const downHidden = calls.length - down.length;
+    const fit = (items) => {
+      const shown = items.length > perRow ? items.slice(0, perRow - 1) : items;
+      return { shown, hidden: items.length - shown.length };
+    };
+    const upFit = fit(callers);
+    const downFit = fit(calls);
 
-    const hasUp = up.length || upHidden;
-    const hasDown = down.length || downHidden;
-
-    const yUp = 4;
-    const yFocus = hasUp ? 78 : 4;
-    const yDown = yFocus + 82;
-    const H = hasDown ? yDown + BOX_H + 4 : yFocus + 48;
+    const hasUp = callers.length > 0;
+    const hasDown = calls.length > 0;
+    const FOCUS_H = 36;
+    const yUp = 1;
+    const yFocus = hasUp ? yUp + BOX_H + ROW_GAP : 1;
+    const yDown = yFocus + FOCUS_H + ROW_GAP;
+    const H = (hasDown ? yDown + BOX_H : yFocus + FOCUS_H) + 2;
 
     const row = (nodes, hidden, y) => {
       const count = nodes.length + (hidden > 0 ? 1 : 0);
       if (!count) {
         return { boxes: [], svg: '' };
       }
-      const w = (W - GAP * (count - 1)) / count;
-      const boxes = nodes.map((n, i) => ({ x: i * (w + GAP), w, node: n }));
+      const w = Math.min(BOX_MAX, (W - GAP * (count - 1)) / count);
+      const left = (W - (w * count + GAP * (count - 1))) / 2;
+      const boxes = nodes.map((n, i) => ({ x: left + i * (w + GAP), w, node: n }));
       if (hidden > 0) {
-        boxes.push({ x: nodes.length * (w + GAP), w, node: null, label: `+${hidden} more` });
+        boxes.push({ x: left + nodes.length * (w + GAP), w, node: null, label: `+${hidden} more` });
       }
       const svg = boxes
         .map((b) => {
           const n = b.node;
-          const dashed = n && n.confidence !== 'resolved';
+          const guess = n && n.confidence !== 'resolved';
           const nav = n
-            ? ` class="hit" data-file="${esc(n.file)}" data-line="${n.line}"`
+            ? ` class="hit${guess ? ' guess' : ''}" data-file="${esc(n.file)}" data-line="${n.line}"><title>${esc(n.qualified)} — ${esc(n.file)}${guess ? ' (a guess)' : ''}</title`
             : ' class="dim"';
           const label = n ? n.name : b.label;
           const sub = n ? String(n.file).split('/').pop() : 'listed below';
           return `<g${nav}>
-            <rect x="${b.x}" y="${y}" width="${b.w}" height="${BOX_H}" rx="6"
-              fill="var(--cc-card)" stroke="${dashed ? 'var(--cc-red)' : 'var(--cc-line)'}"
-              ${dashed ? 'stroke-dasharray="3 3"' : ''}/>
-            <text x="${b.x + 9}" y="${y + 16}" font-size="11" fill="var(--cc-link)">${esc(
-              clip(label, Math.floor((b.w - 14) / 6.7))
-            )}</text>
-            <text x="${b.x + 9}" y="${y + 30}" font-size="9.5" fill="var(--cc-dim)">${esc(
-              clip(sub, Math.floor((b.w - 14) / 5.8))
-            )}</text>
+            <rect x="${b.x + 0.5}" y="${y + 0.5}" width="${b.w - 1}" height="${BOX_H - 1}" rx="5"
+              class="box${guess ? ' g' : ''}${n ? '' : ' more'}"/>
+            <text x="${b.x + 10}" y="${y + 15}" class="nm${n ? '' : ' mut'}">${esc(clip(label, Math.floor((b.w - 18) / 6.9)))}</text>
+            <text x="${b.x + 10}" y="${y + 27}" class="fl">${esc(clip(sub, Math.floor((b.w - 18) / 5.6)))}</text>
           </g>`;
         })
         .join('');
       return { boxes, svg };
     };
 
-    const upRow = row(up, upHidden, yUp);
-    const downRow = row(down, downHidden, yDown);
-    const focusX = 48;
-    const focusW = W - focusX * 2;
+    const upRow = row(upFit.shown, upFit.hidden, yUp);
+    const downRow = row(downFit.shown, downFit.hidden, yDown);
 
+    const name = `${ctx.symbol.name}()`;
+    const focusW = Math.min(W - 20, Math.max(150, name.length * 7.4 + 36));
+    const focusX = (W - focusW) / 2;
+
+    // Edges leave and arrive spread across the focus box, not all at its centre.
     const anchors = (n) => {
       if (!n) {
         return [];
       }
-      const span = focusW * 0.6;
+      const span = Math.min(focusW - 40, n * 40);
       const left = W / 2 - span / 2;
       return n === 1 ? [W / 2] : Array.from({ length: n }, (_, i) => left + (span / (n - 1)) * i);
     };
     const upA = anchors(upRow.boxes.length);
     const downA = anchors(downRow.boxes.length);
 
-    const edge = (x1, y1, x2, y2, dashed) => {
+    const edge = (x1, y1, x2, y2, guess) => {
       const mid = (y1 + y2) / 2;
-      return `<path d="M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}" fill="none"
-        stroke="${dashed ? 'var(--cc-red)' : 'var(--cc-dim)'}" stroke-width="1"
-        ${dashed ? 'stroke-dasharray="3 3"' : ''} opacity=".8" marker-end="url(#cc-ah)"/>`;
+      return `<path d="M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2 - 3}"
+        class="edge${guess ? ' g' : ''}" marker-end="url(#cc-ah${guess ? 'g' : ''})"/>`;
     };
+    const isGuess = (b) => b.node && b.node.confidence !== 'resolved';
 
-    return `<svg viewBox="0 0 ${W} ${H}" class="map" role="img">
-      <defs><marker id="cc-ah" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
-        <path d="M0,0 L6,3 L0,6 Z" fill="var(--cc-dim)"/></marker></defs>
-      ${upRow.boxes
-        .map((b, i) =>
-          edge(b.x + b.w / 2, yUp + BOX_H, upA[i], yFocus, b.node && b.node.confidence !== 'resolved')
-        )
-        .join('')}
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="map" role="img">
+      <defs>
+        <marker id="cc-ah" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0.5 L5,3 L0,5.5 Z" class="ah"/></marker>
+        <marker id="cc-ahg" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0.5 L5,3 L0,5.5 Z" class="ah g"/></marker>
+      </defs>
+      ${upRow.boxes.map((b, i) => edge(b.x + b.w / 2, yUp + BOX_H, upA[i], yFocus, isGuess(b))).join('')}
+      ${downRow.boxes.map((b, i) => edge(downA[i], yFocus + FOCUS_H, b.x + b.w / 2, yDown, isGuess(b))).join('')}
       ${upRow.svg}
-      <rect x="${focusX}" y="${yFocus}" width="${focusW}" height="40" rx="7"
-        fill="var(--cc-card)" stroke="var(--cc-acc)" stroke-width="1.5"/>
-      <text x="${W / 2}" y="${yFocus + 18}" text-anchor="middle" font-size="12"
-        fill="var(--vscode-foreground)">${esc(clip(ctx.symbol.name + '()', Math.floor(focusW / 7.3)))}</text>
-      <text x="${W / 2}" y="${yFocus + 31}" text-anchor="middle" font-size="10"
-        fill="var(--cc-acc)" style="font-family: var(--vscode-font-family)">this function</text>
-      ${downRow.boxes
-        .map((b, i) =>
-          edge(downA[i], yFocus + 42, b.x + b.w / 2, yDown, b.node && b.node.confidence !== 'resolved')
-        )
-        .join('')}
+      <rect x="${focusX + 0.5}" y="${yFocus + 0.5}" width="${focusW - 1}" height="${FOCUS_H - 1}" rx="6" class="focus"/>
+      <text x="${W / 2}" y="${yFocus + 16}" text-anchor="middle" class="nm here">${esc(clip(name, Math.floor((focusW - 16) / 7.2)))}</text>
+      <text x="${W / 2}" y="${yFocus + 28}" text-anchor="middle" class="fl acc">this function</text>
       ${downRow.svg}
     </svg>`;
+  }
+
+  /** How many of `n` nodes the map draws as boxes in one row at this width. */
+  function mapFits(n) {
+    const perRow = mapPerRow(Math.max(240, Math.min(MAP_MAX, (root.clientWidth || 360) - 2)));
+    return n > perRow ? perRow - 1 : n;
+  }
+
+  /** Boxes per row: as many as fit at a readable width, two to four. */
+  function mapPerRow(W) {
+    return Math.max(2, Math.min(4, Math.floor((W + 10) / 115)));
   }
 
   function clip(s, n) {
@@ -691,6 +955,16 @@
         });
       })
     );
+    root.querySelectorAll('[data-every-step]').forEach((el) =>
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        everyStep = !everyStep;
+        render(lastCtx);
+      })
+    );
+    root.querySelectorAll('[data-expand]').forEach((el) =>
+      el.addEventListener('click', () => el.closest('ol').classList.add('all'))
+    );
     root.querySelectorAll('[data-sha]').forEach((el) =>
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -713,6 +987,13 @@
     if (again) {
       again.addEventListener('click', reanalyse);
     }
+    root.querySelectorAll('[data-retry]').forEach((el) => el.addEventListener('click', reanalyse));
+    root.querySelectorAll('[data-setup]').forEach((el) =>
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        vscode.postMessage({ type: 'setupAi' });
+      })
+    );
     const bar = root.querySelector('#stalebar');
     if (bar) {
       bar.addEventListener('click', reanalyse);
@@ -721,8 +1002,26 @@
       el.addEventListener('toggle', () => {
         open[el.getAttribute('data-sec')] = el.open;
         persist();
+        requestAnimationFrame(syncPulse);
       })
     );
+  }
+
+  /**
+   * Every "still working" pulse breathes in step. A CSS animation starts when
+   * its element appears, so the headline, a section opened a second later and
+   * one re-rendered by the next update would each be at a different point in
+   * the cycle. Pinning them all to the same start time lines them up.
+   */
+  function syncPulse() {
+    if (!document.getAnimations) {
+      return;
+    }
+    for (const a of document.getAnimations()) {
+      if (a.animationName === 'ccbreathe') {
+        a.startTime = 0;
+      }
+    }
   }
 
   /**

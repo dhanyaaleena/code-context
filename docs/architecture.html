@@ -302,7 +302,7 @@
         <table class="t">
           <tr><td><code>featureName</code></td><td>Product area, in product words</td></tr>
           <tr><td><code>headline</code> · <code>risk</code></td><td>What it does; who notices if it breaks</td></tr>
-          <tr><td><code>steps[]</code></td><td><code>{n, text}</code> — one per numbered step</td></tr>
+          <tr><td><code>stages[]</code></td><td><code>{from, to, text}</code> — consecutive steps grouped, one sentence each</td></tr>
           <tr><td><code>origin</code> · <code>history</code></td><td>Why it was built; how that changed</td></tr>
           <tr><td><code>originBasis</code></td><td><code>stated</code> or <code>inferred</code></td></tr>
           <tr><td><code>watchOut[]</code></td><td>≤ 3 cautions the evidence supports</td></tr>
@@ -315,7 +315,7 @@
     <div class="sub" style="margin-top:20px">Checked after it returns</div>
     <div class="grid g2" style="gap:12px">
       <div class="card"><h3>Evidence ids must be real</h3><p>Cited ids are filtered to those actually issued, capped at five. Models otherwise cite section headings.</p></div>
-      <div class="card"><h3>Steps are placed by number</h3><p>Each line names its step; 0- or 1-based numbering is detected. A miscount costs one line, which falls back to the computed label.</p></div>
+      <div class="card"><h3>Stages must tile the steps</h3><p>Every step in exactly one stage, in order; 0- or 1-based numbering is detected. A gap or overlap drops the grouping, and each step's own plain line is shown instead.</p></div>
       <div class="card"><h3>"Stated" has to be earned</h3><p>With no commits in the bundle, <code>originBasis</code> is forced to <code>inferred</code> whatever the model says.</p></div>
       <div class="card"><h3>Shape is never trusted</h3><p>Every provider gets the same schema, and every reply is shape-checked before use.</p></div>
     </div>

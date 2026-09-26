@@ -84,6 +84,17 @@ export interface WorkflowStep {
   line: number;
   /** Exception types folded into one handler step, so a run can keep merging. */
   caught?: string[];
+  /** Ids of the loops and conditions this step sits inside, outermost first. */
+  scope?: number[];
+  /** Set when this step heads a block — a loop, a condition, or its else. */
+  header?: StepHeader;
+}
+
+export interface StepHeader {
+  id: number;
+  kind: 'loop' | 'if' | 'else';
+  /** For an else: the id of the condition it is the other side of. */
+  pairOf?: number;
 }
 
 export interface WorkflowInput {
@@ -144,14 +155,22 @@ export interface ContextResponse {
 /** Result of the single AI call. Always optional — the panel works without it. */
 export type Narration =
   | { state: 'error'; reason: string; cached?: boolean }
+  /** No way to reach a model yet: the panel invites the reader to add a key. */
+  | { state: 'setup'; provider?: string; cached?: boolean }
   | {
       state: 'ready';
       featureName: string;
       headline: string;
       flow: string;
       risk: string;
-      /** One plain line per computed workflow step, same order. Empty if unusable. */
+      /** One plain line per computed step, same order ('' where the model gave none). */
       steps: string[];
+      /**
+       * The computed steps grouped into a few stages, each a plain sentence,
+       * as 0-based inclusive step ranges that tile the steps exactly. Empty if
+       * the model's grouping didn't check out.
+       */
+      stages: { from: number; to: number; text: string }[];
       /** What it needs and is given, in plain words. */
       needs: string;
       /** Why this was built in the first place — the need it answered. */

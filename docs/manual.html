@@ -53,27 +53,26 @@
 
     <div class="q"><div class="num">03</div><div>
       <div class="t">Turn on the plain-language layer <span class="tag" style="margin-left:6px">optional</span></div>
-      <p>Open your user settings (<b>Preferences: Open User Settings (JSON)</b>) and add:</p>
-<pre style="margin-top:9px"><span class="s">"codeContext.ai.enabled"</span>: <span class="g">true</span>,
-<span class="s">"codeContext.ai.model"</span>: <span class="g">"claude-haiku-4-5"</span></pre>
-      <p style="margin-top:9px">Then give it a way to reach a model — any one of these:</p></div></div>
+      <p>Run <b>Code Context: Set API key</b> (or click <b>Set up AI</b> in the panel): choose a provider, then a model —
+      the cheapest is marked <i>Recommended</i>: Haiku 4.5, Gemini 2.5 Flash, GPT-6 Luna or Grok Build 0.1 — then paste the
+      key. AI turns on with that model. Run it again to switch. Any one of these routes works:</p></div></div>
 
     <table class="t" style="margin-top:4px">
       <tr><th>Route</th><th>What to do</th><th>Who pays</th></tr>
       <tr><td>GitHub Copilot <span class="c" style="color:var(--ink3)">(VS Code)</span></td>
-          <td>Nothing. If no key is set, the extension uses the editor's own models. Approve the one-time consent prompt.
-          Or set the model to <code>vscode-lm</code> to always use them.</td>
+          <td>No key: set <code>codeContext.ai.enabled</code> to <code>true</code> and the model to <code>vscode-lm</code>.
+          Approve the one-time consent prompt.</td>
           <td>Your Copilot plan</td></tr>
       <tr><td>Anthropic key</td>
           <td><b>Code Context: Set API key</b> → Anthropic → paste a key from <span class="mono">console.anthropic.com</span>.
           Create the key inside a <b>workspace</b>, not at organisation level.</td>
           <td>API usage</td></tr>
       <tr><td>Google key</td>
-          <td><b>Code Context: Set API key</b> → Google, and pick a <code>gemini-*</code> model.
+          <td><b>Code Context: Set API key</b> → Google.
           It needs an <span class="mono">AIza…</span> key — a project number won't work.</td>
           <td>API usage</td></tr>
       <tr><td>OpenAI or xAI key</td>
-          <td><b>Code Context: Set API key</b> → OpenAI or xAI, and pick a <code>gpt-*</code> or <code>grok-*</code> model.
+          <td><b>Code Context: Set API key</b> → OpenAI or xAI.
           Keys from <span class="mono">platform.openai.com</span> or <span class="mono">console.x.ai</span>.</td>
           <td>API usage</td></tr>
     </table>
@@ -128,7 +127,7 @@
             <div class="jmore">+1 more way in</div>
           </div>
           <div class="stats"><span>4 callers</span><span>2 calls</span><span class="bad">no tests</span><span>5 changes</span></div>
-          <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">What it does</span><span class="sm">7 steps · reads, can fail</span></div>
+          <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">What it does</span><span class="sm">4 steps · 3 ways to fail</span></div>
           <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">How it got here</span><span class="sm">latest Feb 2026</span></div>
           <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">What it touches</span><span class="sm">map · 6 further out</span></div>
           <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">Detail</span><span class="sm">2 cautions</span></div>
@@ -156,8 +155,8 @@
         <p>It only sees facts the extension computed. It can't add a route, a feature name or a reason that isn't in them.</p></div>
       <div class="card"><div class="lbl red">Declare code unused</div>
         <p>No callers found can mean the analysis missed them, so it never calls anything dead.</p></div>
-      <div class="card"><div class="lbl red">Rewrite the step list</div>
-        <p>Each plain line is tied to a numbered step. It can't merge, drop or reorder them.</p></div>
+      <div class="card"><div class="lbl red">Hide a step</div>
+        <p>It may group steps into stages, but every step must be covered once, in order — or its grouping is thrown away.</p></div>
       <div class="card"><div class="lbl red">Sound surer than it is</div>
         <p>Thin evidence means low confidence and a shorter answer. A guess about <i>why</i> is labelled <b>inferred</b>.</p></div>
     </div>
@@ -174,22 +173,22 @@
     <div class="grid g2" style="gap:18px; align-items:start">
       <div>
         <h2>What it does</h2>
-        <p style="font-size:12.5px">The function's steps as a timeline — read from its body, then put into plain words by the AI.
-        Click a step to jump to that line.</p>
+        <p style="font-size:12.5px">A flowchart in plain words — conditions and loops are said inside each step, not drawn as code. With AI on, related steps are grouped into a few stages of one sentence each, so long
+        functions stay short; <b>Break it down</b> shows every step. Every way the function can give up branches off to the right in red — a status like <b>401</b>, or <b>stops</b>, with the reason. Click a box to jump to its code;
+        hover to see the steps inside it.</p>
         <div class="pv" style="margin-top:10px">
           <div class="inl" style="margin-top:0">
             <p class="dm" style="margin-bottom:5px">Needs a login token from the user and access to the user database.</p>
-            <div class="tl">
-              <div class="i"><span class="d rd"></span>Checks the login token is genuine</div>
-              <div class="i"><span class="d rd"></span>Finds which user it belongs to</div>
-              <div class="i"><span class="d er"></span>Refuses the request if there's no user</div>
-              <div class="i"><span class="d rt"></span>Hands back the user's details</div>
+            <div class="tl fcx">
+              <div class="i"><span class="d rd"><b>Checks the login token</b></span></div>
+              <div class="i"><span class="d rd"><b>Finds the user</b></span><span class="lead"></span><span class="ex">✕ 401 · No such user</span></div>
+              <div class="i"><span class="d rt"><b>Sends back the user</b></span></div>
             </div>
-            <div class="key"><span class="rd">reads or calls</span><span class="er">can fail</span><span class="rt">returns</span></div>
+            <div class="key"><span class="rd">reads or calls</span><span class="rt">returns</span></div>
           </div>
         </div>
-        <p style="font-size:11.5px; margin-top:8px">Four colours: <span style="color:#4daafc">reads or calls</span>, <span style="color:#c586c0">changes data</span>,
-        <span style="color:#e08b7a">can fail</span>, <span style="color:#7fd1b9">returns</span>. The key lists only the ones used.</p>
+        <p style="font-size:11.5px; margin-top:8px">Box edges: <span style="color:#4daafc">reads or calls</span>, <span style="color:#c586c0">changes data</span>,
+        <span style="color:#7fd1b9">returns</span>. <span style="color:#e08b7a">Red</span> is always a way out. The key lists only the colours used.</p>
       </div>
 
       <div>

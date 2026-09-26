@@ -28,6 +28,8 @@ export function activate(ctx: vscode.ExtensionContext): void {
     status.show();
   }
   let narrationTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Bumped per request; only the latest request's answer is shown. */
+  let narrationSeq = 0;
 
   /**
    * Debounced so that scrolling through a file does not bill a request per
@@ -41,12 +43,18 @@ export function activate(ctx: vscode.ExtensionContext): void {
     delay = 700,
     fresh = false
   ): void {
-    if (!ContextPanel.current || !aiEnabled()) {
+    if (!ContextPanel.current) {
+      return;
+    }
+    if (!aiEnabled()) {
+      // AI isn't on: invite the reader to set it up, in the summary block.
+      ContextPanel.current.narration({ state: 'setup' });
       return;
     }
     if (narrationTimer) {
       clearTimeout(narrationTimer);
     }
+    const seq = ++narrationSeq;
     // The loading state is only shown if the answer is actually slow. A cache
     // hit comes back in a few milliseconds, and flashing "analysing" for that
     // made every background refresh look like work was being redone.
@@ -55,6 +63,11 @@ export function activate(ctx: vscode.ExtensionContext): void {
       const source = doc.getText(new vscode.Range(sym.startLine, 0, sym.endLine + 1, 0));
       const result = await narrate(ctx, response, source, { fresh });
       clearTimeout(showLoading);
+      // A slow answer can arrive after the reader has moved on, or after a
+      // Re-analyse asked again; only the latest request's answer is shown.
+      if (seq !== narrationSeq) {
+        return;
+      }
       ContextPanel.current?.narration(result);
     }, delay);
   }
@@ -260,7 +273,19 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('codeContext.reanalyse', () => refreshFocus(true)),
 
-    vscode.commands.registerCommand('codeContext.setApiKey', () => setApiKey(ctx)),
+    vscode.commands.registerCommand('codeContext.setApiKey', async () => {
+      await setApiKey(ctx);
+      // A key just saved turns AI on; describe the function on screen now.
+      if (aiEnabled() && ContextPanel.current) {
+        void refreshFocus(false);
+      }
+    }),
+    // Turning AI on or off in settings.json shows up without moving the cursor.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if ((e.affectsConfiguration('codeContext.ai.enabled') || e.affectsConfiguration('codeContext.ai.model')) && ContextPanel.current) {
+        void refreshFocus(false);
+      }
+    }),
 
     // Answers "does this editor give extensions any models?" from the editor
     // itself, rather than from documentation that may not cover forks.

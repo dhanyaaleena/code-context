@@ -5,6 +5,10 @@ import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import { ContextResponse, Narration } from './types';
+import { log } from './lsp';
+
+/** Bump when the prompt or schema changes in a way cached narrations should not survive. */
+const PROMPT_VERSION = 5;
 
 /**
  * The one AI call in the product.
@@ -39,6 +43,32 @@ const XAI_BASE_URL = 'https://api.x.ai/v1';
 type Provider = keyof typeof SECRETS;
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
+/**
+ * What Set API key offers for each provider, cheapest first — the first is
+ * marked Recommended. Keep in step with the codeContext.ai.model enum.
+ */
+const MODELS: Record<Provider, { id: string; label: string; note: string }[]> = {
+  anthropic: [
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', note: 'Fast and inexpensive — plenty for plain-language descriptions.' },
+    { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', note: 'Mid-tier — try it if Haiku phrases things poorly.' },
+    { id: 'claude-opus-5', label: 'Claude Opus 5', note: 'Most capable and most expensive.' }
+  ],
+  google: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: 'Fast and inexpensive.' },
+    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', note: 'Newer Flash release.' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', note: 'Newest pinned Flash release.' },
+    { id: 'gemini-flash-latest', label: 'Gemini Flash (latest)', note: 'Always the newest Flash — a moving target.' }
+  ],
+  openai: [
+    { id: 'gpt-6-luna', label: 'GPT-6 Luna', note: "OpenAI's most cost-efficient model." },
+    { id: 'gpt-6-sol', label: 'GPT-6 Sol', note: 'Mid-tier.' },
+    { id: 'gpt-6-astra', label: 'GPT-6 Astra', note: 'Most capable and most expensive.' }
+  ],
+  xai: [
+    { id: 'grok-build-0.1', label: 'Grok Build 0.1', note: "The cheapest Grok model in xAI's list." },
+    { id: 'grok-4.7', label: 'Grok 4.7', note: "Grok's flagship model." }
+  ]
+};
 /** `output_config.effort` is rejected by Haiku 4.5, so it is sent selectively. */
 const EFFORT_MODELS = new Set(['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8']);
 
@@ -93,18 +123,37 @@ const SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          n: { type: 'integer', description: 'The step number exactly as given in [step:N]. Do not renumber.' },
+          n: { type: 'integer', description: 'The step number exactly as given in [step:N].' },
           text: {
             type: 'string',
             description:
-              'That one step said plainly — what it means for the product ("finds the guest\'s check-in form"), not what the code calls ("queries the Submission model"). One short line.'
+              'That one step in plain words anyone on the team could follow — four to twelve words, no code, no variable or function names. Say a loop or condition the step sits inside the way a person would, inside the sentence: "For every vector, notes its ID", "If the older format comes back, reads the text from its metadata instead". For a line that only opens a loop or condition, give an empty string — its meaning belongs in the steps under it. For a failure, name only what goes wrong ("Unknown namespace").'
           }
         },
         required: ['n', 'text'],
         additionalProperties: false
       },
       description:
-        'One entry for each numbered step in WHAT IT DOES, carrying its own step number. Do not merge, reorder or invent steps. If a step is already as plain as it can be, repeat it plainly under its own number. Empty array if no steps were given.'
+        'One entry for every numbered step in WHAT IT DOES, in order, carrying its own number. This is the detailed view — nothing merged or skipped. Empty array if no steps were given.'
+    },
+    stages: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          from: { type: 'integer', description: 'The first step number in this stage, exactly as given in [step:N].' },
+          to: { type: 'integer', description: 'The last step number in this stage (the same as from for a single step).' },
+          text: {
+            type: 'string',
+            description:
+              'What this stage does, as one plain sentence of four to ten words — what it means for the product ("Finds the guest\'s check-in form and its answers"), not what the code calls. Start with a verb. Leave out what happens on failure: the panel draws failures separately. A stage that is only a failure check names what goes wrong ("Missing column").'
+          }
+        },
+        required: ['from', 'to', 'text'],
+        additionalProperties: false
+      },
+      description:
+        'The steps in WHAT IT DOES, grouped into stages a reader can take in at a glance. Each stage is a run of consecutive steps that together do one meaningful thing — a loop and its body, a fetch and the unpacking of its result, a check and the lookup it guards. Every step belongs to exactly one stage, in order, with no gaps or overlaps. Use as few stages as reads naturally: at most five for most functions, up to seven for very long ones; a function of three or four steps may keep one stage per step. Steps are indented under the loop or condition they sit inside; prefer stages that keep a loop or condition together with what is inside it. Empty array if no steps were given.'
     },
     needs: {
       type: 'string',
@@ -144,7 +193,7 @@ const SCHEMA = {
       description: 'Ids from the evidence bundle that support these claims, e.g. "entry:1", "step:2", "commit:a1b2c3d".'
     }
   },
-  required: ['featureName', 'headline', 'flow', 'risk', 'steps', 'needs', 'origin', 'originBasis', 'history', 'watchOut', 'confidence', 'evidence'],
+  required: ['featureName', 'headline', 'flow', 'risk', 'steps', 'stages', 'needs', 'origin', 'originBasis', 'history', 'watchOut', 'confidence', 'evidence'],
   additionalProperties: false
 } as const;
 
@@ -158,7 +207,7 @@ Rules:
 - Never recommend changes, and never say code is unused or dead — absent callers may mean the analysis missed them.
 - Cite the evidence ids you actually relied on.
 - "Why it was built" is a question of motive, not behaviour. Read the introducing commit's message first; its body is usually where the reason is. When the commits are silent on motive, reason it out from what the code serves — the route or job it sits behind, who depends on it, what it keeps being changed alongside — and mark it inferred. Guessing is only a failure when you present it as fact.
-- The step list is a translation, not a summary: one line out for each line in, same order. If you cannot say a step more plainly than it already is, repeat it plainly rather than merging or skipping it.
+- The steps list says every step in plain words, one line each, same order. The stages summarise it without losing it: group consecutive steps that serve one purpose, keep their order, and cover every step exactly once. Never invent a step or describe one that isn't there.
 - "Watch out" is for things the evidence actually shows. No tests, a recent AI-assisted change, a delete, shaky caller analysis. Never write generic advice like "test your changes".`;
 
 interface Bundle {
@@ -210,7 +259,10 @@ function buildBundle(ctx: ContextResponse, source: string): Bundle {
     if (wf.inputs.length) {
       lines.push(`  takes: ${wf.inputs.map((i) => `${i.name} (${i.source})`).join(', ')}`);
     }
-    wf.steps.forEach((st, i) => lines.push(`  [step:${i}] ${st.kind} — ${st.label}`));
+    // Indented under the loop or condition each step sits inside.
+    wf.steps.forEach((st, i) =>
+      lines.push(`  ${'    '.repeat((st.scope ?? []).length)}[step:${i}] ${st.header ? st.header.kind : st.kind} — ${st.label}`)
+    );
     lines.push('');
   }
 
@@ -268,37 +320,102 @@ function buildBundle(ctx: ContextResponse, source: string): Bundle {
 /* ------------------------------------------------------------------- keys */
 
 export async function setApiKey(context: vscode.ExtensionContext): Promise<void> {
-  const pick = await vscode.window.showQuickPick(
-    [
-      { label: 'Anthropic', description: 'for claude-* models', provider: 'anthropic' as Provider },
-      { label: 'Google', description: 'for gemini-* models', provider: 'google' as Provider },
-      { label: 'OpenAI', description: 'for gpt-* models', provider: 'openai' as Provider },
-      { label: 'xAI', description: 'for grok-* models', provider: 'xai' as Provider }
-    ],
-    { title: 'Which API key?', placeHolder: 'Provider' }
-  );
+  const has = async (p: Provider) => !!(await context.secrets.get(SECRETS[p]));
+  const providers: { label: string; description: string; provider?: Provider; remove?: true }[] = [];
+  for (const p of Object.keys(SECRETS) as Provider[]) {
+    providers.push({
+      label: PROVIDER_LABEL[p],
+      description: `${MODELS[p].map((m) => m.label).join(', ')}${(await has(p)) ? ' · key saved' : ''}`,
+      provider: p
+    });
+  }
+  const anySaved = (await Promise.all((Object.keys(SECRETS) as Provider[]).map(has))).some(Boolean);
+  if (anySaved) {
+    providers.push({ label: '$(trash) Remove a saved key…', description: '', remove: true });
+  }
+  const pick = await vscode.window.showQuickPick(providers, { title: 'Set up AI — 1 of 3: provider', placeHolder: 'Which AI provider?' });
   if (!pick) {
     return;
   }
+  if (pick.remove) {
+    await removeKey(context);
+    return;
+  }
+  const provider = pick.provider!;
 
+  // 2. The model, cheapest first and marked as the recommendation — this is
+  // translation over evidence already gathered, which a small model does well.
+  const current = configuredModel();
+  const modelPick = await vscode.window.showQuickPick(
+    MODELS[provider].map((m, i) => ({
+      label: m.label,
+      description: `${m.id}${i === 0 ? ' · Recommended — cheapest' : ''}${m.id === current ? ' · current' : ''}`,
+      detail: m.note,
+      id: m.id
+    })),
+    { title: `Set up AI — 2 of 3: ${PROVIDER_LABEL[provider]} model`, placeHolder: 'Which model?' }
+  );
+  if (!modelPick) {
+    return;
+  }
+
+  // 3. The key. With one already saved, leaving the box empty keeps it.
+  const saved = await has(provider);
   const key = await vscode.window.showInputBox({
-    title: `${pick.label} API key`,
-    prompt: 'Stored in the editor secret storage, never in settings or the repository.',
+    title: `Set up AI — 3 of 3: ${PROVIDER_LABEL[provider]} API key`,
+    prompt: saved
+      ? 'A key is already saved — leave this empty to keep it, or paste a new one. Stored in the editor secret storage.'
+      : 'Stored in the editor secret storage, never in settings or the repository.',
     password: true,
     ignoreFocusOut: true,
-    placeHolder: { anthropic: 'sk-ant-...', google: 'AIza...', openai: 'sk-...', xai: 'xai-...' }[pick.provider]
+    placeHolder: { anthropic: 'sk-ant-...', google: 'AIza...', openai: 'sk-...', xai: 'xai-...' }[provider]
   });
-  if (key === undefined) {
+  if (key === undefined || (!key.trim() && !saved)) {
     return;
   }
-  if (!key.trim()) {
-    await context.secrets.delete(SECRETS[pick.provider]);
-    void vscode.window.showInformationMessage(`Code Context: ${pick.label} key cleared.`);
-    return;
+  if (key.trim()) {
+    await context.secrets.store(SECRETS[provider], key.trim());
   }
-  await context.secrets.store(SECRETS[pick.provider], key.trim());
-  void vscode.window.showInformationMessage(`Code Context: ${pick.label} key saved.`);
+
+  // Choosing a key is the moment someone decides to use the AI layer, so turn
+  // it on with the model they picked — no trip to settings.json.
+  await turnOnFor(provider, modelPick.id);
+  void vscode.window.showInformationMessage(
+    `Code Context: AI descriptions are on, using ${modelPick.label}${key.trim() ? '' : ' with your saved key'}. Change it any time with "Code Context: Set API key".`
+  );
 }
+
+async function removeKey(context: vscode.ExtensionContext): Promise<void> {
+  const saved: { label: string; provider: Provider }[] = [];
+  for (const p of Object.keys(SECRETS) as Provider[]) {
+    if (await context.secrets.get(SECRETS[p])) {
+      saved.push({ label: PROVIDER_LABEL[p], provider: p });
+    }
+  }
+  const pick = await vscode.window.showQuickPick(saved, { title: 'Remove which saved key?' });
+  if (!pick) {
+    return;
+  }
+  await context.secrets.delete(SECRETS[pick.provider]);
+  void vscode.window.showInformationMessage(`Code Context: ${pick.label} key removed.`);
+}
+
+/**
+ * Turn AI on for a provider: enabled, and a model from that provider. A model
+ * already chosen from the same provider is left alone. Returns the model.
+ */
+async function turnOnFor(provider: Provider, chosen?: string): Promise<string> {
+  const config = vscode.workspace.getConfiguration('codeContext');
+  const current = config.get<string>('ai.model') ?? DEFAULT_MODEL;
+  const model = chosen ?? (current !== 'vscode-lm' && providerOf(current) === provider ? current : MODELS[provider][0].id);
+  // User settings, unless this workspace sets its own value — which would win.
+  const target = (k: string) =>
+    config.inspect(k)?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+  await config.update('ai.model', model, target('ai.model'));
+  await config.update('ai.enabled', true, target('ai.enabled'));
+  return model;
+}
+
 
 async function resolveKey(
   context: vscode.ExtensionContext,
@@ -333,7 +450,7 @@ type Route =
  * setup at all. The model that answered is what gets recorded and shown, so
  * the fallback is never silent.
  */
-async function resolveRoute(context: vscode.ExtensionContext): Promise<Route | { error: string }> {
+async function resolveRoute(context: vscode.ExtensionContext): Promise<Route | { error: string } | { setup: string }> {
   const configured = configuredModel();
 
   if (configured === EDITOR_MODEL) {
@@ -356,10 +473,10 @@ async function resolveRoute(context: vscode.ExtensionContext): Promise<Route | {
   if (chat) {
     return { kind: 'editor', model: editorModelLabel(chat), chat };
   }
-  return {
-    error: `No ${PROVIDER_LABEL[provider]} API key, and this editor offers no built-in models. Run "Code Context: Set API key".`
-  };
+  return { setup: PROVIDER_LABEL[provider] };
 }
+
+
 
 export function aiEnabled(): boolean {
   return vscode.workspace.getConfiguration('codeContext').get<boolean>('ai.enabled', false);
@@ -608,6 +725,7 @@ function isNarrationShape(v: unknown): v is {
   flow: string;
   risk: string;
   steps: { n: number; text: string }[];
+  stages: { from: number; to: number; text: string }[];
   needs: string;
   origin: string;
   originBasis: 'stated' | 'inferred';
@@ -628,20 +746,14 @@ function isNarrationShape(v: unknown): v is {
     (o.originBasis === 'stated' || o.originBasis === 'inferred') &&
     typeof o.needs === 'string' &&
     Array.isArray(o.steps) &&
+    Array.isArray(o.stages) &&
     Array.isArray(o.watchOut) &&
     (o.confidence === 'high' || o.confidence === 'medium' || o.confidence === 'low') &&
     Array.isArray(o.evidence)
   );
 }
 
-/**
- * Place each rewritten line against the step it names.
- *
- * Models number from 0 or from 1 depending on the day, so the offset is read
- * off the returned set rather than assumed: a run covering 1..n is 1-based,
- * anything else is taken as-is. Positions nobody claimed stay empty, and the
- * panel falls back to the computed label for those.
- */
+/** Place each plain line against the step it names; 0- or 1-based is read off the set. */
 function alignSteps(raw: unknown, count: number): string[] {
   if (!count || !Array.isArray(raw)) {
     return [];
@@ -666,6 +778,52 @@ function alignSteps(raw: unknown, count: number): string[] {
 }
 
 /**
+ * Check the model's stages against the computed steps and convert them to
+ * 0-based indices.
+ *
+ * Models number from 0 or from 1 depending on the day, so the offset is read
+ * off the result: stages running 1..n are 1-based, 0..n-1 are 0-based. Anything
+ * that doesn't tile the steps exactly — a gap, an overlap, a step out of order —
+ * is rejected whole: a stage that silently skips a step would hide code from
+ * the reader, which is worse than showing every step.
+ */
+function alignStages(raw: unknown, count: number): { from: number; to: number; text: string }[] {
+  if (!count || !Array.isArray(raw)) {
+    return [];
+  }
+  const entries = raw
+    .filter(
+      (e): e is { from: number; to: number; text: string } =>
+        !!e && Number.isInteger((e as any).from) && Number.isInteger((e as any).to) &&
+        typeof (e as any).text === 'string' && !!(e as any).text.trim()
+    )
+    .map((e) => ({ from: Math.min(e.from, e.to), to: Math.max(e.from, e.to), text: e.text.trim() }))
+    .sort((x, y) => x.from - y.from);
+  if (!entries.length) {
+    return [];
+  }
+  const lo = entries[0].from;
+  const hi = entries[entries.length - 1].to;
+  const offset = lo === 1 && hi === count ? 1 : lo === 0 && hi === count - 1 ? 0 : -1;
+  if (offset < 0) {
+    return [];
+  }
+  let next = 0;
+  const out: { from: number; to: number; text: string }[] = [];
+  for (const e of entries) {
+    const from = e.from - offset;
+    const to = e.to - offset;
+    if (from !== next) {
+      return [];
+    }
+    out.push({ from, to, text: e.text });
+    next = to + 1;
+  }
+  return next === count ? out : [];
+}
+
+
+/**
  * Returns a narration, or a reason it could not produce one. Callers render the
  * deterministic panel first and fold this in when it arrives — the product has
  * to stay useful with the model switched off.
@@ -678,12 +836,16 @@ export async function narrate(
 ): Promise<Narration> {
   const bundle = buildBundle(ctx, source);
   const route = await resolveRoute(context);
+  if ('setup' in route) {
+    return { state: 'setup', provider: route.setup };
+  }
   if ('error' in route) {
     return { state: 'error', reason: route.error };
   }
   const model = route.model;
   // Model is part of the key: switching it must re-ask, not replay the old answer.
-  const cacheKey = `narration:${model}:${bundle.hash}`;
+  // PROMPT_VERSION changes when the instructions do, so old answers aren't reused under new rules.
+  const cacheKey = `narration:${PROMPT_VERSION}:${model}:${bundle.hash}`;
 
   // "Re-analyse" means ask again, even when the evidence hasn't moved — the
   // reader has decided the last answer wasn't good enough. The fresh answer
@@ -736,11 +898,21 @@ export async function narrate(
     ]);
     const evidence = raw.parsed.evidence.filter((e) => validIds.has(e)).slice(0, 5);
 
-    // Each rewrite carries the step number it belongs to, so a miscount costs
-    // that one line instead of all of them. The old rule — drop everything
-    // unless the count matched exactly — meant one merged step silently threw
-    // away fourteen good translations and left the raw labels on screen.
+    // Stages must tile the computed steps exactly — in order, every step once —
+    // or they are dropped and the panel draws the computed steps instead.
+    const stages = alignStages(raw.parsed.stages, ctx.workflow.steps.length);
+    // Each plain line carries its step number, so a miscount costs that one
+    // line — the panel falls back to the computed label for it.
     const steps = alignSteps(raw.parsed.steps, ctx.workflow.steps.length);
+
+    // What came back, so a panel showing code-like steps can be explained.
+    const said = steps.filter((t) => t).length;
+    log(
+      `narration ${ctx.symbol.qualified} (${model}): ${ctx.workflow.steps.length} steps — ` +
+        `plain lines ${said}/${ctx.workflow.steps.length}` +
+        `${raw.parsed.steps.length && !steps.length ? ' (unusable numbering)' : ''}, ` +
+        `stages ${stages.length ? stages.length : raw.parsed.stages.length ? 'rejected (gap or overlap)' : 'none'}`
+    );
 
     // With no commits in evidence, "stated" cannot be true whatever the model
     // says — the reader is told which of the two they are looking at, so the
@@ -752,6 +924,7 @@ export async function narrate(
       ...raw.parsed,
       originBasis,
       steps,
+      stages,
       evidence,
       model,
       evidenceHash: bundle.hash,

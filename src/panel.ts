@@ -56,6 +56,8 @@ export class ContextPanel {
           onCommit(msg.sha);
         } else if (msg?.type === 'reanalyse') {
           onReanalyse();
+        } else if (msg?.type === 'setupAi') {
+          void vscode.commands.executeCommand('codeContext.setApiKey');
         }
       },
       null,
@@ -74,7 +76,7 @@ export class ContextPanel {
   }
 
   /** Folded in when the model answers; the panel is already useful without it. */
-  narration(payload: Narration | { state: 'loading' }): void {
+  narration(payload: Narration | { state: 'loading' } | { state: 'setup'; provider?: string }): void {
     void this.panel.webview.postMessage({ type: 'narration', payload });
   }
 
