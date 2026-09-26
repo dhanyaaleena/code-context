@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { scanSymbols, symbolAt } from './pythonScan';
+import { symbolAt } from './pythonScan';
+import { symbolsFor } from './symbols';
 import { getContext } from './cache';
 
 /**
@@ -15,7 +16,7 @@ export class ContextHoverProvider implements vscode.HoverProvider {
     pos: vscode.Position,
     token: vscode.CancellationToken
   ): Promise<vscode.Hover | undefined> {
-    const sym = symbolAt(scanSymbols(doc.getText()), pos.line);
+    const sym = symbolAt(await symbolsFor(doc), pos.line);
     if (!sym) {
       return undefined;
     }

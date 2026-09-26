@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { CodeSymbol, RawCall } from './lang/types';
 
 /**
  * Deliberately regex-based, not a real parser. This is the spike's honest
@@ -6,14 +7,7 @@ import * as vscode from 'vscode';
  * definitions reliably and call edges only approximately.
  */
 
-export interface PySymbol {
-  name: string;
-  qualified: string;
-  kind: 'function' | 'method' | 'class';
-  startLine: number;   // 0-based, the def line
-  endLine: number;     // 0-based, inclusive
-  indent: number;
-}
+export type PySymbol = CodeSymbol;
 
 const DEF_RE = /^(\s*)(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/;
 const CLASS_RE = /^(\s*)class\s+([A-Za-z_]\w*)/;
@@ -88,7 +82,7 @@ export function symbolAt(symbols: PySymbol[], line: number): PySymbol | undefine
   return best;
 }
 
-export interface RawCall { name: string; attribute?: string; line: number; }
+export type { RawCall };
 
 /** Names called inside a symbol's body. Attribute calls are kept but flagged. */
 export function callsInside(text: string, sym: PySymbol): RawCall[] {

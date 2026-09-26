@@ -165,25 +165,52 @@ code does, how it is reached, and what breaks.
 ## Files
 
 ```
-src/pythonScan.ts   regex symbol + call extraction (deliberately naive)
-src/repoIndex.ts    the index: build once, persist by commit, update per file
-src/workflow.ts     a function body → typed, ordered steps
-src/entryPoints.ts  routes, tasks, schedules, commands, events, signals
-src/context.ts      assembles the ContextResponse — replace this with an HTTP client
-src/git.ts          git log -L with bodies, co-change, changed-since, dirty files
-src/ai.ts           evidence bundle, schema, provider routing, validation, cache
-src/cache.ts        memoization by document version
-src/hover.ts        tier 2
-src/codelens.ts     tier 1
-src/panel.ts        tier 3 shell + CSP
-src/extension.ts    wiring: focus, staleness, commands
-media/panel.js      the panel: summary, journey strip, stats, timeline sections, map, stale bar
-media/panel.css     themed from --vscode-* tokens so it follows the colour theme
-fixtures/           sample.bundle — the demo repo's history
-scripts/sample.js   restores sample/ from the bundle
-esbuild.js          bundles src/ into dist/extension.js
-docs/               the PDFs and their HTML sources
+src/lang/types.ts        the LanguagePack interface — everything language-specific
+src/lang/index.ts        the installed packs; add a language here
+src/lang/python.ts       Python pack (wraps pythonScan, workflow, entryPoints)
+src/lang/go.ts           Go pack: func/method/type symbols, package-aware resolution
+src/lang/goWorkflow.ts   Go body → steps (err checks fold into the call they guard)
+src/lang/goEntryPoints.ts  net/http, Gin, Echo, Chi, Gorilla mux, Fiber, Cobra, cron, gRPC, main
+src/lang/goSyntax.ts     masking of strings/comments, import parsing
+src/lsp.ts               callers, callees and symbols from the editor's language servers
+src/symbols.ts           symbols for any document: pack first, language server otherwise
+src/pythonScan.ts        Python symbols and calls by regex
+src/workflow.ts          Python body → steps
+src/entryPoints.ts       Python routes, tasks, schedules, commands, events, signals
+src/repoIndex.ts         the index: build once, persist by commit, update per file
+src/context.ts           assembles the ContextResponse — server first, pack rules as fallback
+src/git.ts               git log -L with bodies, co-change, changed-since, dirty files
+src/ai.ts                evidence bundle, schema, provider routing, validation, cache
+src/cache.ts             memoization by document version
+src/hover.ts             tier 2
+src/codelens.ts          tier 1
+src/panel.ts             tier 3 shell + CSP
+src/extension.ts         wiring: focus, staleness, commands
+media/panel.js           the panel: summary, journey strip, stats, timeline sections, map, stale bar
+media/panel.css          themed from --vscode-* tokens so it follows the colour theme
+fixtures/                sample.bundle — the demo repo's history
+scripts/sample.js        restores sample/ from the bundle
+esbuild.js               bundles src/ into dist/extension.js
+docs/                    the PDFs and their HTML sources
 ```
+
+## Two ways to find callers
+
+1. **The language server**, when the editor has one for the file's language: `vscode.executeReferenceProvider`
+   for callers (references, so `Depends(fn)` and `r.GET("/x", h.Fn)` count), and the call hierarchy for callees.
+   Type-aware, so every edge is marked confirmed. Works for any language.
+2. **The index and the pack's rules**, when no server answers within 4 seconds or it returns nothing. Python
+   resolves through imports; Go through its package rules. What can't be proved is marked a guess.
+
+The **Code Context** output channel logs which was used for each lookup, and the panel's Detail section
+shows it as *Found by*.
+
+## Adding a language
+
+Implement `LanguagePack` from `src/lang/types.ts` and add it to `PACKS` in `src/lang/index.ts`. Nothing in
+the panel, Git, staleness or AI code needs to change. The Go pack is the model: symbols and body ranges,
+calls, the language's own visibility and import rules for the fallback, a step extractor, and entry points
+for its main frameworks. Add an `onLanguage:` activation event in `package.json`.
 
 `ContextResponse` in `src/types.ts` is the API shape from the design doc. Nothing
 outside `context.ts` knows the data is local, so pointing this at a real backend

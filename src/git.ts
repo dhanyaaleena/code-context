@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import * as path from 'path';
-import { HistoryEvent } from './types';
+import { CodeAuthor, HistoryEvent } from './types';
 
 const UNIT = '\x1f';
 const REC = '\x1e';
@@ -20,6 +20,17 @@ function run(args: string[], cwd: string, timeout = 20_000): Promise<string> {
     execFile('git', args, { cwd, timeout, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) =>
       resolve(err ? '' : stdout)
     );
+  });
+}
+
+/** `run`, with `input` written to the command's stdin — for `blame --contents -`. */
+function runWithInput(args: string[], cwd: string, input: string, timeout = 10_000): Promise<string> {
+  return new Promise((resolve) => {
+    const child = execFile('git', args, { cwd, timeout, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) =>
+      resolve(err ? '' : stdout)
+    );
+    child.stdin?.on('error', () => undefined);
+    child.stdin?.end(input);
   });
 }
 
@@ -47,17 +58,19 @@ export async function symbolHistory(
   file: string,
   symbolName: string,
   limit = 8
-): Promise<{ events: HistoryEvent[]; source: 'symbol' | 'file' | 'none'; older: number }> {
+): Promise<{ events: HistoryEvent[]; source: 'symbol' | 'file' | 'none'; older: number; all: HistoryEvent[] }> {
   const rel = path.relative(repoRoot, file) || file;
   // The body carries the reason; the subject usually only carries the what.
-  const fmt = ['%h', '%an', '%aI', '%s', '%b'].join(UNIT) + REC;
+  // %aN, not %an: it honours .mailmap, as blame does, so one person is one name.
+  const fmt = ['%h', '%aN', '%aI', '%s', '%b'].join(UNIT) + REC;
 
   const scoped = await run(
     ['log', '-L', `:${symbolName}:${rel}`, '--no-patch', `--pretty=format:${fmt}`],
     repoRoot
   );
   if (scoped.trim()) {
-    return trim(parse(scoped), limit, 'symbol');
+    const all = parse(scoped);
+    return { ...trim([...all], limit, 'symbol'), all };
   }
 
   const fileLog = await run(
@@ -65,10 +78,11 @@ export async function symbolHistory(
     repoRoot
   );
   if (fileLog.trim()) {
-    return trim(parse(fileLog), limit, 'file');
+    const all = parse(fileLog);
+    return { ...trim([...all], limit, 'file'), all };
   }
 
-  return { events: [], source: 'none', older: 0 };
+  return { events: [], source: 'none', older: 0, all: [] };
 }
 
 /**
@@ -127,6 +141,68 @@ function cleanBody(body: string | undefined): string | undefined {
     .join(' ')
     .trim();
   return kept ? kept.slice(0, 400) : undefined;
+}
+
+/**
+ * Who wrote this code: each person's share of the lines as they stand now
+ * (blame over the editor's buffer, so unsaved edits count as uncommitted), and
+ * how many of the symbol's commits were theirs. Someone who changed the function
+ * but whose lines have since been rewritten still appears, with no lines.
+ */
+export async function symbolAuthors(
+  repoRoot: string,
+  file: string,
+  startLine: number,
+  endLine: number,
+  contents: string,
+  commits: HistoryEvent[],
+  scoped: boolean
+): Promise<{ authors: CodeAuthor[]; uncommittedLines: number }> {
+  const rel = path.relative(repoRoot, file) || file;
+  const out = await runWithInput(
+    ['blame', '--line-porcelain', '-L', `${startLine + 1},${endLine + 1}`, '--contents', '-', '--', rel],
+    repoRoot,
+    contents
+  );
+
+  const byName = new Map<string, CodeAuthor>();
+  const get = (name: string) => {
+    let a = byName.get(name);
+    if (!a) {
+      a = { name, lines: 0, commits: 0, created: false };
+      byName.set(name, a);
+    }
+    return a;
+  };
+
+  let uncommittedLines = 0;
+  let uncommitted = false;
+  for (const line of out.split('\n')) {
+    if (/^[0-9a-f]{40} \d+ \d+/.test(line)) {
+      uncommitted = /^0{40} /.test(line);
+    } else if (line.startsWith('author ')) {
+      if (uncommitted) {
+        uncommittedLines++;
+      } else {
+        get(line.slice(7).trim()).lines++;
+      }
+    }
+  }
+
+  // Commit counts only mean "changed this function" when the history is symbol-scoped.
+  if (scoped) {
+    for (const c of commits) {
+      get(c.author).commits++;
+    }
+    if (commits.length) {
+      get(commits[0].author).created = true;
+    }
+  }
+
+  const authors = [...byName.values()].sort(
+    (a, b) => b.lines - a.lines || b.commits - a.commits || a.name.localeCompare(b.name)
+  );
+  return { authors, uncommittedLines };
 }
 
 export async function showCommit(repoRoot: string, sha: string): Promise<string> {

@@ -30,7 +30,20 @@ export interface HistoryEvent {
   aiAssisted: boolean;
 }
 
-export type EntryKind = 'http' | 'task' | 'schedule' | 'cli' | 'event' | 'signal';
+/** One person's part in the code as it stands: lines they wrote, commits they made. */
+export interface CodeAuthor {
+  name: string;
+  /** Lines of the current body last written by them. */
+  lines: number;
+  /** Commits of theirs in the symbol's history. */
+  commits: number;
+  /** Theirs is the commit that introduced the symbol. */
+  created: boolean;
+}
+
+export type EdgeSource = 'language server' | 'name matching' | 'none';
+
+export type EntryKind = 'http' | 'task' | 'schedule' | 'cli' | 'event' | 'signal' | 'rpc';
 
 /** A way the outside world gets in: a URL, a job, a command, an event. */
 export interface EntryPoint {
@@ -116,6 +129,12 @@ export interface ContextResponse {
   historySource: 'symbol' | 'file' | 'none';
   /** Changes older than the window, dropped from `history` but counted. */
   historyOlder: number;
+  /** Who wrote it, most lines first. Local only — never sent to the AI. */
+  authors: CodeAuthor[];
+  /** Lines not yet committed (unsaved or uncommitted edits). */
+  uncommittedLines: number;
+  /** Where the caller and callee lists came from — shown so a wrong edge can be explained. */
+  sources: { callers: EdgeSource; callees: EdgeSource };
   tests: { count: number; files: string[] };
   impact: { direct: number; transitive: number };
   indexedAt: string;     // commit sha or "working tree"

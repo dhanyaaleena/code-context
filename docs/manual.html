@@ -26,7 +26,7 @@
       <p>Engineers new to a codebase, reviewers, and the people around them — product, QA, support —
       who need to know what a piece of code means without reading it.</p></div>
     <div class="card"><div class="lbl">What you need</div>
-      <p>VS Code or Cursor, a Python project in Git. Optional: an AI model for the plain-language
+      <p>VS Code or Cursor, and a Python or Go project in Git — other languages get a basic panel. Optional: an AI model for the plain-language
       layer — via GitHub Copilot, or an Anthropic, Google, OpenAI or xAI API key.</p></div>
   </div>
   <div class="foot"><span>Code Context · User manual</span><span>1</span></div>
@@ -46,8 +46,8 @@
       use <b>Extensions: Install from VSIX…</b> and choose <code>code-context-lens.vsix</code>.</p></div></div>
 
     <div class="q"><div class="num">02</div><div>
-      <div class="t">Open a Python project</div>
-      <p>Open any <code>.py</code> file. The extension indexes the workspace in the background — the status bar shows
+      <div class="t">Open a Python or Go project</div>
+      <p>Open any <code>.py</code> or <code>.go</code> file. The extension indexes the workspace in the background — the status bar shows
       <code>⛁ 412 files</code> when it's ready. The first index is saved to disk, so reopening the project later
       only re-reads the files Git says have changed.</p></div></div>
 
@@ -220,7 +220,7 @@
           <path d="M165 98 V110" fill="none" stroke="#777"/>
           <rect x="97" y="110" width="136" height="30" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="107" y="123" font-size="9.5" fill="#4daafc" class="mono">load_profile</text><text x="107" y="135" font-size="8" fill="#9d9d9d" class="mono">service.py</text>
         </svg>
-        <p style="font-size:11.5px; margin-top:8px"><b>Dashed</b> links are guesses — the name matched but no import proves it. Treat them as leads to check.</p>
+        <p style="font-size:11.5px; margin-top:8px"><b>Dashed</b> links are guesses — the name matched but nothing proves it. With your language's extension installed, callers come from its language server and are confirmed.</p>
       </div>
 
       <div>
@@ -229,6 +229,7 @@
         <div class="pv" style="margin-top:10px">
           <div class="dl"><span class="k">If it breaks</span><span>Every admin page stops loading for every staff member.</span></div>
           <div class="dl"><span class="k">Tests</span><span>No test file references this</span></div>
+          <div class="dl"><span class="k">Authors</span><span>Maya Okafor · created it · 12 of 18 lines<br>Arjun Mehta · 5 of 18 lines</span></div>
           <div class="dl"><span class="k">As of commit</span><span class="mono" style="font-size:10px">be44c8b</span></div>
           <div class="dl" style="margin-bottom:0"><span class="k">Evidence</span><span class="mono" style="font-size:10px;color:#9d9d9d">entry:0 · step:2 · commit:827fb4e</span></div>
         </div>
@@ -362,7 +363,7 @@
           <tr><td><code>ai.model</code></td><td><code>claude-haiku-4-5</code> (default), <code>vscode-lm</code>, <code>gemini-*</code>, <code>gpt-*</code>, <code>grok-*</code></td></tr>
           <tr><td><code>ai.editorModel</code></td><td>Which editor model, e.g. <code>haiku</code></td></tr>
           <tr><td><code>codeLens</code></td><td>Show the lens above functions</td></tr>
-          <tr><td><code>maxFiles</code></td><td>Python files indexed (400)</td></tr>
+          <tr><td><code>maxFiles</code></td><td>Files indexed for name matching (400)</td></tr>
         </table>
       </div>
     </div>
@@ -379,6 +380,10 @@
         <p>That's Google's capacity, not your setup. It retries once; if it keeps failing, switch to Haiku.</p></div>
       <div class="card"><h3>Steps show code words, not plain ones</h3>
         <p>The AI's answer hasn't arrived or couldn't be matched. Click ↻; unmatched steps fall back to the computed label.</p></div>
+      <div class="card"><h3>Callers are all dashed guesses</h3>
+        <p>No language server answered. Install your language's extension — Pylance, or Go for gopls. Detail's <b>Found by</b> line says which was used.</p></div>
+      <div class="card"><h3>No steps or journey in this language</h3>
+        <p>Steps and routes come from language packs: Python and Go today. Other languages still get callers, calls, the map and history.</p></div>
       <div class="card"><h3>A caller is missing</h3>
         <p>Calls made dynamically — <code>getattr</code>, dispatch tables — can't be seen by reading names. Nothing is ever labelled unused for this reason.</p></div>
     </div>

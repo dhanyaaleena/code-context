@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { ContextResponse, EntryPoint, FeatureContext, SymbolRef } from './types';
-import { PySymbol, callsInside, relPath, symbolAt } from './pythonScan';
-import { coChangedFiles, headSha, isDirty, repoRootFor, symbolHistory } from './git';
-import { EntryPointIndex, describeEntry, entryKey } from './entryPoints';
-import { buildWorkflow } from './workflow';
+import { ContextResponse, EntryPoint, FeatureContext, SymbolRef, Workflow } from './types';
+import { relPath, symbolAt } from './pythonScan';
+import { coChangedFiles, headSha, isDirty, repoRootFor, symbolAuthors, symbolHistory } from './git';
+import { describeEntry } from './entryPoints';
+import { CodeSymbol, EntryPointIndex, LanguagePack, entryKey } from './lang/types';
+import { packForLanguage, packForPath } from './lang';
+import { lspCallees, lspCallers } from './lsp';
 
 import { FileIndex, ensureIndex, filesMentioning } from './repoIndex';
 
@@ -17,69 +19,61 @@ async function entryIndex(): Promise<EntryPointIndex> {
 }
 
 /**
- * Caller resolution, heuristic on purpose.
+ * Caller resolution by name — the fallback when no language server answers.
  *
- * resolved  — the call site is in the defining file, or the file imports this name
- * heuristic — the name is called somewhere else and we are guessing it is the same symbol
+ * resolved  — the use is in the defining file, or the language's import rules prove it
+ * heuristic — the name matches and nothing rules it out, but nothing proves it either
  *
- * A real implementation would delegate to Jedi or Pyright here. Keeping the
- * guesswork visible is the point of the spike.
+ * Each language decides what counts as proof: an import for Python, a package
+ * qualifier for Go. Keeping the guesswork visible is the point.
  */
-async function findCallers(target: PySymbol, defRel: string): Promise<SymbolRef[]> {
+async function findCallersByName(target: CodeSymbol, defRel: string, pack: LanguagePack): Promise<SymbolRef[]> {
   // Only files that mention the name at all can possibly call it. This is the
   // difference between reading the whole corpus per lookup and reading four files.
-  const files = await filesMentioning(target.name);
+  const files = (await filesMentioning(target.name)).filter((f) => f.lang === pack.id);
   const out: SymbolRef[] = [];
 
   // A function is "used" in two different ways, and only one of them has a paren
   // after it. Framework code is full of the other kind — Depends(fn), @app.get(fn),
-  // register(fn), celery task tables — so matching only `name(` silently loses them.
+  // register(fn), r.GET("/x", h.Handler) — so matching only `name(` loses them.
   const refRe = new RegExp(`\\b${target.name}\\b`);
   const callRe = new RegExp(`\\b${target.name}\\s*\\(`);
-  const importRe = new RegExp(
-    `^\\s*(from\\s+\\S+\\s+import\\s+.*\\b${target.name}\\b|import\\s+.*\\b${target.name}\\b)`,
-    'm'
-  );
-  // A `def` line can legitimately reference the symbol — default arguments and
-  // decorators both live there — so only skip it when it *defines* the name.
-  const defOfRe = new RegExp(`^\\s*(?:async\\s+)?(?:def|class)\\s+${target.name}\\b`);
 
   for (const f of files) {
-    const imports = f.rel === defRel || importRe.test(f.text);
     const lines = f.text.split(/\r?\n/);
-
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].replace(/#.*$/, '');
+      const line = pack.stripComment(lines[i]);
       if (!refRe.test(line)) {
         continue;
       }
       if (f.rel === defRel && i === target.startLine) {
         continue; // the definition itself
       }
-      if (/^\s*(from\s+\S+\s+)?import\s/.test(line)) {
-        continue; // the import statement, not a use
+      if (pack.isImportLine(line) || pack.isDefinitionLine(line, target.name)) {
+        continue; // an import, or a different definition of the same name
       }
-      if (defOfRe.test(line)) {
-        continue; // a different definition of the same name, not a use
+      const resolution = pack.resolve(f, defRel, target, line);
+      if (resolution === 'skip') {
+        continue; // the language's rules say this can't be the target
       }
 
       const kind: 'call' | 'reference' = callRe.test(line) ? 'call' : 'reference';
       const enclosing = symbolAt(f.symbols, i);
-      const base = path.basename(f.rel, '.py');
+      const base = pack.moduleLabel(f.rel);
       const ref: SymbolRef = {
         name: enclosing ? enclosing.name : base,
-        qualified: enclosing ? `${base}.${enclosing.qualified}` : `${base} (module level)`,
+        qualified: enclosing ? `${base}.${enclosing.qualified}` : `${base} (top level)`,
         file: f.rel,
         line: enclosing ? enclosing.startLine : i,
         kind,
-        confidence: imports ? 'resolved' : 'heuristic',
+        confidence: resolution,
         reason:
           (kind === 'reference' ? 'passed as a reference, not called — ' : '') +
-          (imports
+          (resolution === 'resolved'
             ? f.rel === defRel
               ? 'same file'
-              : 'file imports this name'
-            : 'name matches, no import found')
+              : 'proved by imports'
+            : 'name matches, nothing proves it')
       };
       if (!out.some((r) => r.file === ref.file && r.qualified === ref.qualified)) {
         out.push(ref);
@@ -89,9 +83,20 @@ async function findCallers(target: PySymbol, defRel: string): Promise<SymbolRef[
   return out;
 }
 
-async function resolveCallees(text: string, sym: PySymbol, defRel: string): Promise<SymbolRef[]> {
-  const files = await indexWorkspace();
-  const raw = callsInside(text, sym);
+/** Callers by name, for walks and counts where a server round-trip per hop is too slow. */
+async function findCallers(target: CodeSymbol, defRel: string): Promise<SymbolRef[]> {
+  const pack = packForPath(defRel);
+  return pack ? findCallersByName(target, defRel, pack) : [];
+}
+
+async function resolveCalleesByName(
+  text: string,
+  sym: CodeSymbol,
+  defRel: string,
+  pack: LanguagePack
+): Promise<SymbolRef[]> {
+  const files = (await indexWorkspace()).filter((f) => f.lang === pack.id);
+  const raw = pack.callsInside(text, sym);
   const out: SymbolRef[] = [];
 
   for (const call of raw) {
@@ -138,7 +143,7 @@ async function resolveCallees(text: string, sym: PySymbol, defRel: string): Prom
 
     // Nothing in the workspace defines it. If it was imported, it is library
     // code — say so, rather than pointing at a file that does not define it.
-    const importedFrom = importSourceOf(here?.text ?? '', call.name);
+    const importedFrom = pack.importSourceOf(here?.text ?? text, call);
     out.push({
       name: call.name,
       qualified: call.attribute ? `${call.attribute}.${call.name}` : call.name,
@@ -149,11 +154,6 @@ async function resolveCallees(text: string, sym: PySymbol, defRel: string): Prom
     });
   }
   return out;
-}
-
-function importSourceOf(text: string, name: string): string | undefined {
-  const re = new RegExp(`^\\s*from\\s+([\\w.]+)\\s+import\\s+.*\\b${name}\\b`, 'm');
-  return re.exec(text)?.[1];
 }
 
 /* ------------------------------------------------------------------ feature */
@@ -188,44 +188,33 @@ function shortName(dir: string): string {
 function serviceOf(rel: string): string | undefined {
   const parts = rel.split('/');
   for (let i = 0; i < parts.length - 1; i++) {
-    if (CONTAINER_DIRS.has(parts[i].toLowerCase()) && parts[i + 1] && !parts[i + 1].endsWith('.py')) {
+    if (CONTAINER_DIRS.has(parts[i].toLowerCase()) && parts[i + 1] && !packForPath(parts[i + 1])) {
       return parts[i + 1];
     }
   }
   return undefined;
 }
 
-/**
- * Resolve a dotted import to a file in the workspace, so dependency edges are
- * between real directories instead of between top-level folder names.
- */
-function moduleToFile(modulePath: string, files: FileIndex[]): FileIndex | undefined {
-  const asPath = modulePath.replace(/\./g, '/');
-  return files.find((f) => f.rel === `${asPath}.py` || f.rel === `${asPath}/__init__.py`)
-    ?? files.find((f) => f.rel.endsWith(`/${asPath}.py`) || f.rel.endsWith(`/${asPath}/__init__.py`));
-}
-
-const IMPORT_LINE_RE = /^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))/gm;
-
 /** Directory-level import edges: the zoomed-out sibling of the call graph. */
 function directoryEdges(files: FileIndex[]): Map<string, Set<string>> {
   const edges = new Map<string, Set<string>>();
-
+  const byLang = new Map<string, FileIndex[]>();
+  for (const f of files) {
+    byLang.set(f.lang, [...(byLang.get(f.lang) ?? []), f]);
+  }
   for (const f of files) {
     const from = dirOf(f.rel);
     if (!edges.has(from)) {
       edges.set(from, new Set());
     }
-    const re = new RegExp(IMPORT_LINE_RE.source, 'gm');
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(f.text))) {
-      const target = moduleToFile(m[1] ?? m[2] ?? '', files);
-      if (!target) {
-        continue; // third-party or stdlib: not our concern
-      }
+    const pack = packForPath(f.rel);
+    if (!pack) {
+      continue;
+    }
+    for (const target of pack.importedFiles(f, byLang.get(f.lang) ?? [])) {
       const to = dirOf(target.rel);
       if (to !== from) {
-        edges.get(from)!.add(to);
+        edges.get(from)!.add(to); // third-party imports never match a workspace file
       }
     }
   }
@@ -239,6 +228,7 @@ function directoryEdges(files: FileIndex[]): Map<string, Set<string>> {
 async function findEntryPoints(
   seeds: SymbolRef[],
   files: FileIndex[],
+  entries: EntryPointIndex,
   maxVisits = 24
 ): Promise<SymbolRef[]> {
   const roots: SymbolRef[] = [];
@@ -261,6 +251,12 @@ async function findEntryPoints(
       continue;
     }
 
+    // A Go handler is referenced from the function that registers its route, so
+    // "nobody calls it" never happens there — a known entry point is a root too.
+    if (entries.has(entryKey(f.rel, sym.startLine))) {
+      roots.push(node);
+      continue;
+    }
     const up = await findCallers(sym, f.rel);
     if (up.length === 0) {
       roots.push(node);
@@ -287,7 +283,8 @@ async function buildFeature(
   callees: SymbolRef[],
   files: FileIndex[],
   repoRoot: string,
-  absFile: string
+  absFile: string,
+  walkFrom: SymbolRef[]
 ): Promise<FeatureContext> {
   const dir = dirOf(defRel);
   const inDir = files.filter((f) => dirOf(f.rel) === dir);
@@ -298,7 +295,7 @@ async function buildFeature(
     .map(([from]) => shortName(from));
 
   const [entryPoints, coChange] = await Promise.all([
-    findEntryPoints(callers, files),
+    findEntryPoints(walkFrom, files, await entryIndex()),
     coChangedFiles(repoRoot, absFile)
   ]);
 
@@ -324,21 +321,53 @@ async function buildFeature(
 const TEST_RE = /(^|\/)(tests?|testing)\//i;
 
 function isTestFile(rel: string): boolean {
-  return TEST_RE.test(rel) || /(^|\/)test_[^/]+\.py$/.test(rel) || /_test\.py$/.test(rel);
+  return TEST_RE.test(rel) || !!packForPath(rel)?.isTestFile(rel);
 }
+
+const NO_WORKFLOW: Workflow = { requires: [], inputs: [], steps: [], confidence: 'heuristic' };
 
 export async function buildContext(
   doc: vscode.TextDocument,
-  sym: PySymbol
+  sym: CodeSymbol
 ): Promise<ContextResponse> {
   const defRel = relPath(doc.uri);
-  const [callers, callees] = await Promise.all([
-    findCallers(sym, defRel),
-    resolveCallees(doc.getText(), sym, defRel)
+  const pack = packForLanguage(doc.languageId) ?? packForPath(defRel);
+  const files = await indexWorkspace();
+
+  // The language server knows the real call graph; the pack's name rules are
+  // the fallback. Languages without a pack depend on the server alone.
+  const callerCtx = {
+    pack,
+    moduleLabel: (rel: string) => pack?.moduleLabel(rel) ?? (rel.split('/').pop() ?? rel).replace(/\.[^.]+$/, ''),
+    symbolsOf: async (uri: vscode.Uri) => {
+      const rel = relPath(uri);
+      const indexed = files.find((f) => f.rel === rel);
+      if (indexed) {
+        return indexed;
+      }
+      try {
+        const other = await vscode.workspace.openTextDocument(uri);
+        const otherPack = packForLanguage(other.languageId);
+        const { lspDocumentSymbols } = await import('./lsp');
+        const symbols = otherPack ? otherPack.scanSymbols(other.getText()) : (await lspDocumentSymbols(other)) ?? [];
+        return { rel, text: other.getText(), symbols };
+      } catch {
+        return undefined;
+      }
+    }
+  };
+  const [serverCallers, serverCallees] = await Promise.all([
+    lspCallers(doc, sym, callerCtx),
+    lspCallees(doc, sym, relPath)
   ]);
+  const callers = serverCallers ?? (pack ? await findCallersByName(sym, defRel, pack) : []);
+  const callees = serverCallees ?? (pack ? await resolveCalleesByName(doc.getText(), sym, defRel, pack) : []);
+  const sources: ContextResponse['sources'] = {
+    callers: serverCallers ? 'language server' : pack ? 'name matching' : 'none',
+    callees: serverCallees ? 'language server' : pack ? 'name matching' : 'none'
+  };
 
   // one extra hop, capped, so "transitive" means something without a graph store
-  const files = await indexWorkspace();
   const transitive = new Set<string>();
   for (const c of callers.slice(0, 8)) {
     const f = files.find((x) => x.rel === c.file);
@@ -361,14 +390,23 @@ export async function buildContext(
     isDirty(root, doc.uri.fsPath),
     symbolHistory(root, doc.uri.fsPath, sym.name)
   ]);
+  const { authors, uncommittedLines } = await symbolAuthors(
+    root, doc.uri.fsPath, sym.startLine, sym.endLine, doc.getText(), history.all, history.source === 'symbol'
+  );
 
-  const feature = await buildFeature(defRel, callers, callees, files, root, doc.uri.fsPath);
+  // When this function is itself a route or job, the places that only *name* it
+  // are where it gets registered — `r.GET("/x", h.GetUser)` inside main — not
+  // further ways in. Elsewhere a reference is often exactly how code is reached
+  // (`Depends(get_current_user)` runs on every request), so it only applies here.
+  const entries = await entryIndex();
+  const isEntryPoint = entries.get(entryKey(defRel, sym.startLine));
+  const walkFrom = isEntryPoint ? callers.filter((c) => c.kind !== 'reference') : callers;
+
+  const feature = await buildFeature(defRel, callers, callees, files, root, doc.uri.fsPath, walkFrom);
 
   // Translate the caller-tree roots into things a person can recognise: a URL,
   // a job, a command. Roots with no framework decorator are left out rather
   // than described as "some function", which would say nothing.
-  const entries = await entryIndex();
-  const isEntryPoint = entries.get(entryKey(defRel, sym.startLine));
   const reachedFrom: EntryPoint[] = [];
   for (const rootSym of feature.entryPoints) {
     const hit = entries.get(entryKey(rootSym.file, rootSym.line));
@@ -377,7 +415,7 @@ export async function buildContext(
     }
   }
   // Direct callers can be entry points too, even when the walk found deeper roots.
-  for (const c of callers) {
+  for (const c of walkFrom) {
     const hit = entries.get(entryKey(c.file, c.line));
     if (hit && !reachedFrom.some((e) => e.label === hit.label)) {
       reachedFrom.push(hit);
@@ -386,7 +424,7 @@ export async function buildContext(
 
   // The route path lets the signature parser tell path parameters from body ones.
   const routePath = (isEntryPoint ?? reachedFrom[0])?.label.split(' ').pop();
-  const workflow = buildWorkflow(doc.getText(), sym, routePath);
+  const workflow = pack ? pack.buildWorkflow(doc.getText(), sym, routePath) : NO_WORKFLOW;
 
   return {
     workflow,
@@ -422,6 +460,9 @@ export async function buildContext(
     history: history.events,
     historySource: history.source,
     historyOlder: history.older,
+    authors,
+    uncommittedLines,
+    sources,
     tests: { count: new Set(testFiles).size, files: [...new Set(testFiles)] },
     impact: { direct: callers.length, transitive: transitive.size },
     indexedAt: sha || 'no git',
@@ -430,7 +471,7 @@ export async function buildContext(
 }
 
 function buildSummary(
-  sym: PySymbol,
+  sym: CodeSymbol,
   feature: FeatureContext,
   callers: SymbolRef[],
   callees: SymbolRef[],
@@ -476,7 +517,7 @@ function buildSummary(
   return `${sym.name}() is ${where}. ${flow}${depends} It has ${churn} and ${safety}.`;
 }
 
-function stubPurpose(sym: PySymbol, callers: number, callees: number, changes: number): string {
+function stubPurpose(sym: CodeSymbol, callers: number, callees: number, changes: number): string {
   void callers;
   void callees;
   return changes > 4
@@ -490,13 +531,17 @@ function stubPurpose(sym: PySymbol, callers: number, callees: number, changes: n
  */
 export async function quickStats(
   doc: vscode.TextDocument,
-  sym: PySymbol
+  sym: CodeSymbol
 ): Promise<{ callers: number; heuristic: number; callees: number }> {
   const defRel = relPath(doc.uri);
-  const callers = await findCallers(sym, defRel);
+  const pack = packForLanguage(doc.languageId) ?? packForPath(defRel);
+  if (!pack) {
+    return { callers: 0, heuristic: 0, callees: 0 };
+  }
+  const callers = await findCallersByName(sym, defRel, pack);
   return {
     callers: callers.length,
     heuristic: callers.filter((c) => c.confidence !== 'resolved').length,
-    callees: callsInside(doc.getText(), sym).length
+    callees: pack.callsInside(doc.getText(), sym).length
   };
 }

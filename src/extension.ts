@@ -2,14 +2,15 @@ import * as vscode from 'vscode';
 import { ContextCodeLensProvider } from './codelens';
 import { ContextHoverProvider } from './hover';
 import { ContextPanel } from './panel';
-import { PySymbol, scanSymbols, symbolAt } from './pythonScan';
+import { symbolAt } from './pythonScan';
+import { CodeSymbol } from './lang/types';
+import { PACK_SELECTOR, isCodeDocument, symbolsFor } from './symbols';
 import { clearAll, getContext } from './cache';
 import { indexStats, invalidateIndex, updateFile, watchWorkspace } from './repoIndex';
 import { repoRootFor, showCommit } from './git';
 import { aiEnabled, editorModelLabel, editorModels, narrate, pickEditorModel, setApiKey } from './ai';
-import { PySymbol as Sym } from './pythonScan';
+type Sym = CodeSymbol;
 
-const PY: vscode.DocumentSelector = { language: 'python', scheme: 'file' };
 
 export function activate(ctx: vscode.ExtensionContext): void {
   const lenses = new ContextCodeLensProvider();
@@ -23,7 +24,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
       return;
     }
     status.text = `$(database) ${s.files} files`;
-    status.tooltip = `Code Context: ${s.files} Python files indexed, ${s.names} names, ${s.updates} incremental update${s.updates === 1 ? '' : 's'} since. Click to re-index.`;
+    status.tooltip = `Code Context: ${s.files} source files indexed, ${s.names} names, ${s.updates} incremental update${s.updates === 1 ? '' : 's'} since. Click to re-index.`;
     status.show();
   }
   let narrationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -90,7 +91,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     } catch {
       return undefined;
     }
-    const syms = scanSymbols(doc.getText());
+    const syms = await symbolsFor(doc);
     const sym =
       syms
         .filter((s) => s.qualified === target.qualified)
@@ -164,7 +165,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
   // Build once, in the background, so the first panel open is not the thing
   // that pays for indexing the repository.
-  // Fires after any Python file changes on disk, including writes from outside
+  // Fires after any indexed source file changes on disk, including writes from outside
   // the editor. Callers live in other files, so a change anywhere can change
   // what the panel should say about the focused function.
   watchWorkspace(ctx, () => {
@@ -180,13 +181,13 @@ export function activate(ctx: vscode.ExtensionContext): void {
   })();
 
   ctx.subscriptions.push(
-    vscode.languages.registerHoverProvider(PY, new ContextHoverProvider()),
-    vscode.languages.registerCodeLensProvider(PY, lenses),
+    vscode.languages.registerHoverProvider(PACK_SELECTOR, new ContextHoverProvider()),
+    vscode.languages.registerCodeLensProvider(PACK_SELECTOR, lenses),
 
     vscode.commands.registerCommand('codeContext.showPanel', async (arg?: { uri: string; line: number }) => {
       const target = await resolveTarget(arg);
       if (!target) {
-        void vscode.window.showInformationMessage('Code Context: put the cursor in a Python function first.');
+        void vscode.window.showInformationMessage('Code Context: put the cursor inside a function first.');
         return;
       }
       const { doc, sym } = target;
@@ -220,7 +221,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
     // keep the panel following the cursor, the way the design describes
     vscode.window.onDidChangeTextEditorSelection(async (e) => {
-      if (!ContextPanel.current || e.textEditor.document.languageId !== 'python') {
+      if (!ContextPanel.current || !isCodeDocument(e.textEditor.document)) {
         return;
       }
       // Selection moves caused by an edit arrive with no kind. An agent
@@ -231,7 +232,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
         return;
       }
       const doc = e.textEditor.document;
-      const sym = symbolAt(scanSymbols(doc.getText()), e.selections[0].active.line);
+      const sym = symbolAt(await symbolsFor(doc), e.selections[0].active.line);
       if (!sym) {
         return;
       }
@@ -300,7 +301,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     // updateFile notifies the watchWorkspace callback above, which refreshes
     // caches and lenses and re-checks whether the panel is stale.
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
-      if (doc.languageId === 'python') {
+      if (isCodeDocument(doc)) {
         await updateFile(doc.uri);
       }
     }),
@@ -325,7 +326,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
 async function resolveTarget(
   arg?: { uri: string; line: number }
-): Promise<{ doc: vscode.TextDocument; sym: PySymbol } | undefined> {
+): Promise<{ doc: vscode.TextDocument; sym: CodeSymbol } | undefined> {
   let doc: vscode.TextDocument | undefined;
   let line: number | undefined;
 
@@ -334,7 +335,7 @@ async function resolveTarget(
     line = arg.line;
   } else {
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId === 'python') {
+    if (editor && isCodeDocument(editor.document)) {
       doc = editor.document;
       line = editor.selection.active.line;
     }
@@ -343,7 +344,7 @@ async function resolveTarget(
     return undefined;
   }
 
-  const sym = symbolAt(scanSymbols(doc.getText()), line);
+  const sym = symbolAt(await symbolsFor(doc), line);
   return sym ? { doc, sym } : undefined;
 }
 

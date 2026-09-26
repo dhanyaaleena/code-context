@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { createHash } from 'crypto';
-import { PySymbol, relPath, scanSymbols } from './pythonScan';
-import { EntryPointIndex, scanEntryPoints } from './entryPoints';
+import { relPath } from './pythonScan';
+import { CodeSymbol, EntryPointIndex } from './lang/types';
+import { PACKS, excludeGlob, packForPath, packGlob } from './lang';
 import { changedBetween, dirtyFiles, headSha, repoRootFor } from './git';
 
 /**
@@ -19,7 +20,9 @@ export interface FileIndex {
   uri: vscode.Uri;
   rel: string;
   text: string;
-  symbols: PySymbol[];
+  symbols: CodeSymbol[];
+  /** Which language pack read it. */
+  lang: string;
 }
 
 export interface Repo {
@@ -34,7 +37,6 @@ export interface Repo {
   fromCache?: { reused: number; reread: number };
 }
 
-const EXCLUDE = '**/{.venv,venv,env,node_modules,site-packages,__pycache__,.git,build,dist,.tox,.mypy_cache}/**';
 const IDENT_RE = /[A-Za-z_]\w*/g;
 
 let repo: Repo | undefined;
@@ -44,8 +46,8 @@ let onChanged: (() => void) | undefined;
 let storage: vscode.Uri | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Bump when the cache's own shape changes; symbols are always rescanned. */
-const CACHE_VERSION = 2;
+/** Bump when the cache's own shape or the set of indexed languages changes. */
+const CACHE_VERSION = 3;
 /** Above this, writing the cache costs more than rebuilding it. */
 const MAX_CACHE_BYTES = 24 * 1024 * 1024;
 
@@ -94,7 +96,9 @@ async function readFile(uri: vscode.Uri): Promise<FileIndex | undefined> {
   try {
     const bytes = await vscode.workspace.fs.readFile(uri);
     const text = Buffer.from(bytes).toString('utf8');
-    return { uri, rel: relPath(uri), text, symbols: scanSymbols(text) };
+    const rel = relPath(uri);
+    const pack = packForPath(rel);
+    return pack ? { uri, rel, text, symbols: pack.scanSymbols(text), lang: pack.id } : undefined;
   } catch {
     return undefined; // unreadable or deleted between listing and reading
   }
@@ -102,7 +106,7 @@ async function readFile(uri: vscode.Uri): Promise<FileIndex | undefined> {
 
 async function build(): Promise<Repo> {
   const max = vscode.workspace.getConfiguration('codeContext').get<number>('maxFiles', 400);
-  const uris = await vscode.workspace.findFiles('**/*.py', EXCLUDE, max);
+  const uris = await vscode.workspace.findFiles(packGlob(), excludeGlob(), max);
 
   const next = emptyRepo();
   for (const uri of uris) {
@@ -114,11 +118,25 @@ async function build(): Promise<Repo> {
     next.byRel.set(file.rel, file);
     addToNameIndex(next.byName, file.rel, file.text);
   }
-  next.entries = scanEntryPoints(next.files);
+  next.entries = scanAllEntryPoints(next.files);
   next.builtAt = Date.now();
   repo = next;
   scheduleSave();
   return next;
+}
+
+/** Each pack reads its own files' routes and jobs; the results share one index. */
+function scanAllEntryPoints(files: FileIndex[]): EntryPointIndex {
+  const all: EntryPointIndex = new Map();
+  for (const pack of PACKS) {
+    const mine = files.filter((f) => f.lang === pack.id);
+    if (mine.length) {
+      for (const [key, entry] of pack.scanEntryPoints(mine)) {
+        all.set(key, entry);
+      }
+    }
+  }
+  return all;
 }
 
 /* ------------------------------------------------------------ persistence */
@@ -210,18 +228,20 @@ async function loadCache(): Promise<Repo | undefined> {
     return undefined; // the cached commit is gone — rebased or pruned
   }
   const dirty = await dirtyFiles(gitRoot);
-  const suspect = new Set([...moved, ...dirty].filter((p) => p.endsWith('.py')));
+  const suspect = new Set([...moved, ...dirty].filter((p) => !!packForPath(p)));
 
   const next = emptyRepo();
   for (const entry of cached.files) {
-    if (suspect.has(entry.rel)) {
-      continue; // re-read below
+    const pack = packForPath(entry.rel);
+    if (suspect.has(entry.rel) || !pack) {
+      continue; // re-read below, or a language no longer indexed
     }
     const file: FileIndex = {
       uri: vscode.Uri.joinPath(vscode.Uri.file(root), entry.rel),
       rel: entry.rel,
       text: entry.text,
-      symbols: scanSymbols(entry.text)
+      symbols: pack.scanSymbols(entry.text),
+      lang: pack.id
     };
     next.files.push(file);
     next.byRel.set(file.rel, file);
@@ -238,7 +258,7 @@ async function loadCache(): Promise<Repo | undefined> {
     addToNameIndex(next.byName, file.rel, file.text);
   }
 
-  next.entries = scanEntryPoints(next.files);
+  next.entries = scanAllEntryPoints(next.files);
   next.builtAt = Date.now();
   next.updates = 0;
   next.fromCache = { reused: cached.files.length - suspect.size, reread: suspect.size };
@@ -291,7 +311,7 @@ export async function updateFile(uri: vscode.Uri): Promise<void> {
 
   // Decorators can move between files, and the mount prefix for a route is
   // resolved across files, so entry points are rescanned rather than patched.
-  repo.entries = scanEntryPoints(repo.files);
+  repo.entries = scanAllEntryPoints(repo.files);
   repo.updates++;
   scheduleSave();
   onChanged?.();
@@ -309,7 +329,7 @@ export function removeFile(uri: vscode.Uri): void {
   repo.files = repo.files.filter((f) => f.rel !== rel);
   repo.byRel.delete(rel);
   dropFromNameIndex(repo.byName, rel);
-  repo.entries = scanEntryPoints(repo.files);
+  repo.entries = scanAllEntryPoints(repo.files);
   repo.updates++;
   scheduleSave();
   onChanged?.();
@@ -366,7 +386,7 @@ export function watchWorkspace(context: vscode.ExtensionContext, changed: () => 
   if (watcher) {
     return;
   }
-  watcher = vscode.workspace.createFileSystemWatcher('**/*.py');
+  watcher = vscode.workspace.createFileSystemWatcher(packGlob());
   context.subscriptions.push(
     watcher,
     watcher.onDidChange((uri) => void updateFile(uri)),

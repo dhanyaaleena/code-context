@@ -1,4 +1,5 @@
 import { PySymbol } from './pythonScan';
+import { EntryPointIndex, ScannedFile, entryKey } from './lang/types';
 import { EntryPoint, EntryKind } from './types';
 
 /**
@@ -11,18 +12,8 @@ import { EntryPoint, EntryKind } from './types';
  * not a replacement for it.
  */
 
-export interface ScannedFile {
-  rel: string;
-  text: string;
-  symbols: PySymbol[];
-}
-
-/** Keyed by `${file}#${defLine}` so a symbol can be looked up by where it is defined. */
-export type EntryPointIndex = Map<string, EntryPoint>;
-
-export function entryKey(file: string, line: number): string {
-  return `${file}#${line}`;
-}
+export type { ScannedFile, EntryPointIndex } from './lang/types';
+export { entryKey } from './lang/types';
 
 const HTTP_RE =
   /@(\w+)\.(get|post|put|patch|delete|head|options|route|api_route)\s*\(\s*(?:path\s*=\s*)?['"]([^'"]+)['"]/;
@@ -225,6 +216,8 @@ export function describeEntry(e: EntryPoint): string {
       return `the app fires ${e.label}`;
     case 'signal':
       return e.label;
+    case 'rpc':
+      return `a client calls ${e.label.replace('rpc ', '')} over gRPC`;
     default:
       return e.label;
   }

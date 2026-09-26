@@ -99,7 +99,7 @@ export class ContextPanel {
 <title>Code Context</title>
 </head>
 <body>
-  <div id="root"><p class="empty">Put the cursor in a Python function.</p></div>
+  <div id="root"><p class="empty">Put the cursor inside a function.</p></div>
   <script nonce="${nonce}" src="${js}"></script>
 </body>
 </html>`;

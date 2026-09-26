@@ -37,7 +37,7 @@
   </p>
   <div style="display:flex; gap:9px; margin-top:34px; flex-wrap:wrap">
     <span class="tag on">Working extension</span>
-    <span class="tag on">Python</span>
+    <span class="tag on">Python · Go · any language server</span>
     <span class="tag on">VS Code · Cursor</span>
     <span class="tag on">Claude · GPT · Gemini · Grok · Copilot</span>
     <span class="tag off">No backend yet</span>
@@ -81,9 +81,10 @@
     <table class="t">
       <tr><th>Area</th><th>State</th></tr>
       <tr><td>Index, context pipeline, entry points, history</td><td><span class="tag on">Built</span></td></tr>
+      <tr><td>Language packs (Python, Go) and the language-server layer</td><td><span class="tag on">Built</span></td></tr>
       <tr><td>AI layer — three providers, grounding, cache</td><td><span class="tag on">Built</span></td></tr>
       <tr><td>Staleness, re-analyse, disk-persisted index</td><td><span class="tag on">Built</span> <span style="color:var(--ink3); font-size:11.5px">— disk cold start not yet exercised on a large repo</span></td></tr>
-      <tr><td>Shared backend, team cache, PR/issue metadata, other languages</td><td><span class="tag off">Designed, not built</span></td></tr>
+      <tr><td>Shared backend, team cache, PR/issue metadata, more language packs</td><td><span class="tag off">Designed, not built</span></td></tr>
     </table>
   </div>
   <div class="foot"><span>Code Context · Architecture</span><span>2</span></div>
@@ -122,8 +123,8 @@
       <!-- analysis -->
       <rect x="120" y="164" width="350" height="56" rx="7" fill="#171c22" stroke="#7fd1b9"/>
       <text x="136" y="183" font-size="11" fill="#eef2f6" font-weight="600">Context builder</text>
-      <text x="136" y="198" font-size="9.5" fill="#a9b4c0" class="mono">context.ts · workflow.ts · entryPoints.ts</text>
-      <text x="136" y="211" font-size="9.5" fill="#a9b4c0">steps · callers · callees · routes · feature · impact</text>
+      <text x="136" y="198" font-size="9.5" fill="#a9b4c0" class="mono">context.ts · lsp.ts · lang/ packs</text>
+      <text x="136" y="211" font-size="9.5" fill="#a9b4c0">language server first · pack rules as fallback</text>
       <rect x="490" y="164" width="188" height="56" rx="7" fill="#1d1a14" stroke="#f0b866"/>
       <text x="506" y="183" font-size="11" fill="#f0b866" font-weight="600">AI narrator</text>
       <text x="506" y="198" font-size="9.5" fill="#a9b4c0" class="mono">ai.ts</text>
@@ -158,10 +159,9 @@
 
     <table class="t" style="margin-top:18px">
       <tr><th>Module</th><th>Owns</th></tr>
-      <tr><td><code>pythonScan.ts</code></td><td>Symbols and body ranges by regex — balancing parentheses so wrapped signatures don't truncate the body</td></tr>
+      <tr><td><code>lang/</code></td><td>Language packs — Python and Go. Each says how to find a function, how a use is written, how the body reads as steps, and how frameworks register routes</td></tr>
+      <tr><td><code>lsp.ts</code></td><td>Callers, callees and symbols from whatever language server the editor has — type-aware, any language</td></tr>
       <tr><td><code>repoIndex.ts</code></td><td>The index: build once, persist to disk keyed by commit, update one file at a time, inverted name index</td></tr>
-      <tr><td><code>workflow.ts</code></td><td>A function body → typed, ordered steps; parameters and injected dependencies</td></tr>
-      <tr><td><code>entryPoints.ts</code></td><td>Routes, tasks, schedules, commands, events and signals across frameworks</td></tr>
       <tr><td><code>context.ts</code></td><td>Assembles <code>ContextResponse</code> — callers with confidence, callees, feature, impact, tests</td></tr>
       <tr><td><code>git.ts</code></td><td>Symbol-scoped history with bodies, co-change, changed-since and dirty-file sets</td></tr>
       <tr><td><code>ai.ts</code></td><td>Evidence bundle, schema, provider routing, validation, cache</td></tr>
@@ -238,20 +238,21 @@
 
   <div class="body" style="margin-top:18px">
     <div class="stage"><span class="no">1</span><span class="nm">Symbol</span><div>
-      <p>Find the <code>def</code> or <code>class</code> enclosing the cursor and its full body. Parentheses are balanced first, because a
-      wrapped signature's closing <code>):</code> sits at the definition's own indent and used to end the body early.</p></div></div>
+      <p>Find the function enclosing the cursor and its full body — from the language pack (<code>def</code> and indentation for Python,
+      <code>func</code> and brace matching for Go) or, for any other language, from the language server's document symbols.</p></div></div>
     <div class="stage"><span class="no">2</span><span class="nm">Steps</span><div>
-      <p>Read the body into typed steps — reads, writes, calls, failures, branches, loops, filters, returns. Conversions like
-      <code>to_dict()</code> are dropped; an <code>except</code> tail folds into one step; a <code>Depends(get_db)</code> becomes a requirement, not a step.</p></div></div>
+      <p>Read the body into typed steps, by the pack's rules. Python: an <code>except</code> tail folds into one step, <code>Depends(get_db)</code>
+      becomes a requirement. Go: an <code>if err != nil</code> check folds into the call it guards; <code>c.JSON(404, …)</code> reads as "answers 404".</p></div></div>
     <div class="stage"><span class="no">3</span><span class="nm">Callers</span><div>
-      <p>Candidates come from the name index; each use is kept as a call or a passed reference. <b>Resolved</b> if in the defining file or
-      the file imports the name, otherwise <b>heuristic</b>. One further hop gives transitive impact.</p></div></div>
+      <p>The language server's references first — type-aware, so every edge is <b>confirmed</b>. Without one, the name index and the pack's
+      rules: an import for Python; for Go, same package or a <code>pkg.Name</code> through an import, and lowercase names never cross packages.</p></div></div>
     <div class="stage"><span class="no">4</span><span class="nm">Callees</span><div>
-      <p>Names called from the body, resolved to definitions in the repository, or marked external with the module they come from.</p></div></div>
+      <p>The language server's call hierarchy first; otherwise names called from the body, resolved to definitions in the repository. Anything
+      outside it is marked external with the library it comes from.</p></div></div>
     <div class="stage"><span class="no">5</span><span class="nm">Entry points</span><div>
-      <p>FastAPI and Flask routes with prefixes composed across <code>APIRouter</code> and <code>include_router</code>; Celery, APScheduler,
-      Click, Typer, startup events, Django signals. The framework is read from imports, since <code>@bp.route</code> looks identical in both.
-      Functions with no decorator inherit the routes of the handlers above them.</p></div></div>
+      <p>Python: FastAPI, Flask, Celery, APScheduler, Click, Typer, Django signals. Go: net/http, Gin, Echo, Chi, Gorilla mux and Fiber with
+      group prefixes, Cobra, cron, gRPC, <code>main()</code> — traced from where a route is registered back to the handler it names.
+      Other functions inherit the routes of the handlers above them.</p></div></div>
     <div class="stage"><span class="no">6</span><span class="nm">Feature</span><div>
       <p>The directory it belongs to, skipping containers like <code>apps/</code> and <code>src/</code>, plus files that keep being committed
       alongside it — ignoring sweeping commits of more than 20 files and requiring at least two co-occurrences.</p></div></div>
@@ -263,8 +264,8 @@
 
     <div class="callout" style="margin-top:16px">
       <div class="t">Where resolution is weakest</div>
-      <p>Regex resolution cannot see <code>getattr</code> dispatch, registries or dependency injection by string. Those are false negatives, which is
-      why "no callers" is never presented as "unused". A real resolver — Pyright or Jedi — is the single biggest accuracy upgrade available.</p>
+      <p>Without a language server, callers are matched by name, and a Go method call can't be tied to its type — those edges are marked
+      guesses. Neither method sees <code>getattr</code> dispatch or reflection, which is why "no callers" is never presented as "unused".</p>
     </div>
   </div>
   <div class="foot"><span>Code Context · Architecture</span><span>5</span></div>
@@ -390,8 +391,8 @@
     <div class="sub" style="margin-top:24px">Known limits, and what comes next</div>
     <table class="t">
       <tr><th>Limit today</th><th>Direction</th></tr>
-      <tr><td>Regex resolution misses dynamic calls</td><td>Pyright or Jedi for callers and callees; keep the confidence labels</td></tr>
-      <tr><td>Python only</td><td>Per-language scanners behind the same <code>ContextResponse</code></td></tr>
+      <tr><td>Without a language server, callers are name-matched</td><td>Suggest the language's extension when none answers</td></tr>
+      <tr><td>Steps and routes only for Python and Go</td><td>More packs — TypeScript, Java — on the same interface</td></tr>
       <tr><td>Per-machine index and cache</td><td>A backend with a shared cache keyed by repo + commit + symbol</td></tr>
       <tr><td>PR numbers parsed from subjects</td><td>Fetch PR and issue text — the richest source of <i>why</i></td></tr>
       <tr><td>First workspace folder only, 400-file cap</td><td>Multi-root support; lift the cap once resolution is incremental</td></tr>

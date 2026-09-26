@@ -4,7 +4,7 @@
   <a href="https://marketplace.visualstudio.com/items?itemName=dhanyaaleena.code-context-lens"><img src="https://vsmarketplacebadges.dev/version-short/dhanyaaleena.code-context-lens.svg" alt="VS Marketplace version"></a>
 </p>
 
-Put your cursor in a Python function you didn't write. Code Context tells you what it does in
+Put your cursor in a function you didn't write. Code Context tells you what it does in
 plain language, how people and systems reach it, why it was built, and what it's connected to —
 in a panel beside your code.
 
@@ -23,7 +23,8 @@ is named on the right.
 
 **The journey.** How the outside world gets here: the route or job, the handler it lands in, then this
 function. Routes carry a method badge — `GET`, `POST`, `DELETE` — and every row is a click to that code.
-It reads your framework's routing: FastAPI, Flask, Celery, APScheduler, Click, Typer and Django signals.
+It reads your framework's routing — for Python: FastAPI, Flask, Celery, APScheduler, Click, Typer and
+Django signals; for Go: net/http, Gin, Echo, Chi, Gorilla mux, Fiber, Cobra, cron jobs, gRPC and `main()`.
 Helpers that nothing reaches from outside simply don't get a journey.
 
 **The numbers.** Callers, calls, tests, changes and AI-assisted commits, in one line. "No tests" is
@@ -40,14 +41,16 @@ Then four sections, collapsed until you want them. Each remembers whether you le
 - **What it touches** — a small map: callers above, this function in the middle, what it calls below.
   Click any box to go there. Links the analysis can't prove are drawn dashed.
 - **Detail** — what would break if this failed, cautions worth knowing before you change it, whether
-  tests reference it, the commit the answer reflects, and which evidence the AI relied on.
+  tests reference it, who wrote it — each author's share of the current lines and how many changes they
+  made — the commit the answer reflects, and which evidence the AI relied on. Author names stay on your
+  machine; they are never sent to the AI.
 
 Everything outside the amber bars — the journey, the steps' order, callers, commits — is computed
 locally from your code and Git, and doesn't depend on a model.
 
 ## Getting started
 
-1. Install **Code Context Lens** from the Extensions view (search "Code Context Lens") and open a Python project that uses Git.
+1. Install **Code Context Lens** from the Extensions view (search "Code Context Lens") and open a Python or Go project that uses Git.
 2. Click the lens above any function — `3 callers · 5 calls — Show context` — or run
    **Code Context: Show context panel** from the command palette.
 
@@ -124,13 +127,19 @@ Click **Re-analyse** when you're ready.
 | `codeContext.ai.model` | `claude-haiku-4-5` | Which model writes them. The prefix picks the provider: `claude-*` Anthropic, `gemini-*` Google, `gpt-*` OpenAI, `grok-*` xAI, `vscode-lm` your editor's models. |
 | `codeContext.ai.editorModel` | *(empty)* | Only with `vscode-lm`: prefer a model by name, e.g. `haiku` or `gpt-4.1`. |
 | `codeContext.codeLens` | `true` | Show the lens above each function. |
-| `codeContext.maxFiles` | `400` | How many Python files to index. |
+| `codeContext.maxFiles` | `400` | How many source files to index for the name-matching fallback. |
 
 ## Good to know
 
-- **Python only**, for now.
-- **Caller detection reads names, not types.** Calls made through `getattr`, registries or dispatch
-  tables can be missed, so the extension never labels code as unused.
+- **Languages.** Python and Go get everything: steps, the journey, callers and history. Any other
+  language your editor has a language server for — TypeScript, Rust, Java, C#… — gets the summary,
+  callers, calls, the map and history, but not steps or the journey yet.
+- **Callers come from your language server when there is one** — Pylance, gopls, and so on — so they
+  understand types and are confirmed. Without one, the extension matches names instead, and marks what it
+  can't prove as a guess. Detail shows which was used. For Go, installing the Go extension (which brings
+  gopls) makes a real difference.
+- **Nothing is ever labelled unused.** Calls made dynamically — `getattr`, registries, reflection — can
+  be invisible to both methods.
 - **Claude Pro/Max and Cursor subscriptions can't be used** for the AI layer — neither gives extensions
   access to its models.
 

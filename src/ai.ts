@@ -167,11 +167,22 @@ interface Bundle {
 }
 
 /** Everything the model is allowed to see, and nothing else. */
+/** From the file extension, so the model reads `err != nil` as Go and `def` as Python. */
+function languageOf(file: string): string {
+  const ext = file.split('.').pop()?.toLowerCase() ?? '';
+  const names: Record<string, string> = {
+    py: 'Python', go: 'Go', ts: 'TypeScript', tsx: 'TypeScript', js: 'JavaScript', jsx: 'JavaScript',
+    rs: 'Rust', java: 'Java', kt: 'Kotlin', rb: 'Ruby', cs: 'C#', php: 'PHP', swift: 'Swift', scala: 'Scala'
+  };
+  return names[ext] ?? ext;
+}
+
 function buildBundle(ctx: ContextResponse, source: string): Bundle {
   const lines: string[] = [];
 
   lines.push(`SYMBOL: ${ctx.symbol.qualified}()`);
   lines.push(`FILE: ${ctx.symbol.file}`);
+  lines.push(`LANGUAGE: ${languageOf(ctx.symbol.file)}`);
   lines.push(`DIRECTORY: ${ctx.feature.path}${ctx.feature.service ? ` (service: ${ctx.feature.service})` : ''}`);
   lines.push('');
 

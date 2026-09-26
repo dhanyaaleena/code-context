@@ -525,11 +525,11 @@ function plural(name: string): string {
 }
 
 /** Consecutive identical labels are almost always a loop body read twice. */
-function dedupe(steps: WorkflowStep[]): WorkflowStep[] {
+export function dedupe(steps: WorkflowStep[]): WorkflowStep[] {
   return steps.filter((s, i) => i === 0 || s.label !== steps[i - 1].label);
 }
 
-function shorten(s: string, n = 44): string {
+export function shorten(s: string, n = 44): string {
   const t = s.trim().replace(/\s+/g, ' ');
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 }

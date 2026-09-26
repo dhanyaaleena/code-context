@@ -184,7 +184,7 @@
     const badge = http
       ? `<span class="method m-${METHOD_CLASS[http[1].split('/')[0]] || 'other'}">${esc(http[1])}</span>`
       : `<span class="method m-other">${esc(KIND_BADGE[e.kind] || e.kind)}</span>`;
-    const text = http ? http[2] : e.label.replace(/^(background job|scheduled|command):\s*/, '');
+    const text = http ? http[2] : e.label.replace(/^(background job|scheduled|command):\s*|^rpc\s+/, '');
     return `<div class="jrow hit" data-file="${esc(e.symbol.file)}" data-line="${e.symbol.line}"
                  title="${esc(e.label)}${e.detail ? ' · ' + esc(e.detail) : ''}">
       ${badge}<span class="jpath">${esc(text)}</span>
@@ -585,6 +585,13 @@
       narration && narration.state === 'error'
         ? `<p class="why">Description unavailable — ${esc(narration.reason)}</p>`
         : '';
+    // Where the edges came from: a type-checking language server, or name matching.
+    const src = ctx.sources;
+    const foundBy = src
+      ? src.callers === src.callees
+        ? src.callers
+        : `callers by ${src.callers}, calls by ${src.callees}`
+      : '';
     const tests = ctx.tests.count
       ? `${ctx.tests.count} test file${ctx.tests.count === 1 ? '' : 's'} reference this`
       : 'No test file references this';
@@ -592,7 +599,44 @@
     return `${watch}${err}${rows
       .map((r) => `<p class="line"><span class="k">${esc(r[0])}</span>${esc(r[1])}</p>`)
       .join('')}<p class="line"><span class="k">Tests</span>${esc(tests)}</p>
+      ${authorsRow(ctx)}
+      ${foundBy ? `<p class="line"><span class="k">Found by</span><span>${esc(foundBy)}</span></p>` : ''}
       <p class="line"><span class="k">As of commit</span><span><span class="mono">${esc(ctx.indexedAt)}</span>${ctx.dirty ? ' · plus unsaved edits' : ''}</span></p>${ev}`;
+  }
+
+  /* Who wrote it: one line per person, most lines first. */
+  function authorsRow(ctx) {
+    const all = ctx.authors || [];
+    if (!all.length && !ctx.uncommittedLines) {
+      return '';
+    }
+    const total = all.reduce((n, a) => n + a.lines, 0) + (ctx.uncommittedLines || 0);
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    const describe = (a) => {
+      const bits = [];
+      if (a.created) {
+        bits.push('created it');
+      }
+      if (a.lines) {
+        bits.push(all.length > 1 || ctx.uncommittedLines ? `${a.lines} of ${total} lines` : 'all current lines');
+      } else {
+        bits.push('none of the current lines');
+      }
+      if (a.commits) {
+        bits.push(plural(a.commits, 'change'));
+      }
+      return bits.join(' · ');
+    };
+    const shown = all.slice(0, 5);
+    const items = shown
+      .map((a) => `<li><span class="aname">${esc(a.name)}</span><span class="ameta">${esc(describe(a))}</span></li>`)
+      .join('');
+    const more = all.length > shown.length ? `<li class="ameta">+${all.length - shown.length} more</li>` : '';
+    const mine = ctx.uncommittedLines
+      ? `<li><span class="aname">Uncommitted edits</span><span class="ameta">${ctx.uncommittedLines} of ${total} lines</span></li>`
+      : '';
+    const label = all.length > 1 ? 'Authors' : 'Author';
+    return `<div class="line"><span class="k">${label}</span><ul class="authors">${items}${more}${mine}</ul></div>`;
   }
 
   /* ------------------------------------------------------------- plumbing */
@@ -617,7 +661,7 @@
     ['k-return', 'returns']
   ];
 
-  const KIND_BADGE = { task: 'JOB', schedule: 'CRON', cli: 'CLI', event: 'EVENT', signal: 'SIGNAL' };
+  const KIND_BADGE = { task: 'JOB', schedule: 'CRON', cli: 'CLI', event: 'EVENT', signal: 'SIGNAL', rpc: 'RPC' };
   const METHOD_CLASS = { GET: 'get', POST: 'post', PUT: 'put', PATCH: 'patch', DELETE: 'delete' };
 
   const ICON = {

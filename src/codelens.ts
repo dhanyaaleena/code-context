@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { scanSymbols } from './pythonScan';
+import { symbolsFor } from './symbols';
 import { getStats } from './cache';
 
 /**
@@ -9,6 +9,8 @@ import { getStats } from './cache';
  * required to see it, and one click into the map. It doubles as the ambient
  * signal — you notice a high-churn or heuristic-heavy function while scrolling past.
  */
+type LensWithDoc = vscode.CodeLens & { docUri?: string };
+
 export class ContextCodeLensProvider implements vscode.CodeLensProvider {
   private emitter = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this.emitter.event;
@@ -17,15 +19,15 @@ export class ContextCodeLensProvider implements vscode.CodeLensProvider {
     this.emitter.fire();
   }
 
-  provideCodeLenses(doc: vscode.TextDocument): vscode.CodeLens[] {
+  async provideCodeLenses(doc: vscode.TextDocument): Promise<vscode.CodeLens[]> {
     if (!vscode.workspace.getConfiguration('codeContext').get<boolean>('codeLens', true)) {
       return [];
     }
-    return scanSymbols(doc.getText())
+    return (await symbolsFor(doc))
       .filter((s) => s.kind !== 'class')
       .map((s) => {
         const lens = new vscode.CodeLens(new vscode.Range(s.startLine, 0, s.startLine, 0));
-        (lens as vscode.CodeLens & { _symLine?: number })._symLine = s.startLine;
+        (lens as LensWithDoc).docUri = doc.uri.toString();
         return lens;
       });
   }
@@ -34,16 +36,17 @@ export class ContextCodeLensProvider implements vscode.CodeLensProvider {
     lens: vscode.CodeLens,
     token: vscode.CancellationToken
   ): Promise<vscode.CodeLens> {
-    const editor = vscode.window.activeTextEditor;
-    const doc =
-      editor && editor.document.languageId === 'python' ? editor.document : undefined;
+    // The lens's own document — not whichever editor happens to be active, which
+    // gave a split view's lenses the other file's numbers.
+    const uri = (lens as LensWithDoc).docUri;
+    const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri);
     if (!doc) {
       lens.command = { title: '$(circle-outline) Code Context', command: '' };
       return lens;
     }
 
     const line = lens.range.start.line;
-    const sym = scanSymbols(doc.getText()).find((s) => s.startLine === line);
+    const sym = (await symbolsFor(doc)).find((s) => s.startLine === line);
     if (!sym) {
       lens.command = { title: '$(circle-outline) Code Context', command: '' };
       return lens;
