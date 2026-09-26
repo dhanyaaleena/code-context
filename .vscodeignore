@@ -1,0 +1,11 @@
+.vscode/**
+.gitignore
+src/**
+**/*.map
+tsconfig.json
+sample/**
+fixtures/**
+scripts/**
+docs/**
+**/*.pdf
+**/.DS_Store

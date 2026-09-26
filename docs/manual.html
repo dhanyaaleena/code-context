@@ -1,0 +1,393 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Code Context — User Manual</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<!-- ===================================================== 1 · cover -->
+<section class="page cover">
+  <div class="rule"></div>
+  <div class="kicker">User manual</div>
+  <h1>Code<br>Context</h1>
+  <div style="font-size:19px; color:var(--acc); margin-top:18px; font-weight:500">Know what you're touching.</div>
+  <p class="lede" style="max-width:560px">
+    Put your cursor in a function you didn't write. Code Context tells you what it does in plain
+    language, how people and systems reach it, why it was built, and what breaks if you change it.
+  </p>
+  <p class="lede" style="max-width:560px; color:var(--ink3); font-size:13.5px">
+    This manual covers setup, how to read the panel, a worked example, and what happens when the
+    code changes underneath you.
+  </p>
+  <div style="margin-top:44px" class="grid g2">
+    <div class="card"><div class="lbl">Who it's for</div>
+      <p>Engineers new to a codebase, reviewers, and the people around them — product, QA, support —
+      who need to know what a piece of code means without reading it.</p></div>
+    <div class="card"><div class="lbl">What you need</div>
+      <p>VS Code or Cursor, a Python project in Git. Optional: an AI model for the plain-language
+      layer — via GitHub Copilot, or an Anthropic or Google API key.</p></div>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>1</span></div>
+</section>
+
+<!-- ===================================================== 2 · setup -->
+<section class="page">
+  <div class="kicker">Getting started</div>
+  <h1>Set up in three steps</h1>
+  <p class="lede">Everything except the plain-language layer works as soon as the extension is installed.
+  No account, no server, nothing leaves your machine until you turn AI on.</p>
+
+  <div class="body">
+    <div class="q"><div class="num">01</div><div>
+      <div class="t">Install the extension</div>
+      <p>Command palette → <b>Extensions: Install from VSIX…</b> → choose <code>code-context.vsix</code>.
+      Then <b>Developer: Reload Window</b>.</p></div></div>
+
+    <div class="q"><div class="num">02</div><div>
+      <div class="t">Open a Python project</div>
+      <p>Open any <code>.py</code> file. The extension indexes the workspace in the background — the status bar shows
+      <code>⛁ 412 files</code> when it's ready. The first index is saved to disk, so reopening the project later
+      only re-reads the files Git says have changed.</p></div></div>
+
+    <div class="q"><div class="num">03</div><div>
+      <div class="t">Turn on the plain-language layer <span class="tag" style="margin-left:6px">optional</span></div>
+      <p>Open your user settings (<b>Preferences: Open User Settings (JSON)</b>) and add:</p>
+<pre style="margin-top:9px"><span class="s">"codeContext.ai.enabled"</span>: <span class="g">true</span>,
+<span class="s">"codeContext.ai.model"</span>: <span class="g">"claude-haiku-4-5"</span></pre>
+      <p style="margin-top:9px">Then give it a way to reach a model — any one of these:</p></div></div>
+
+    <table class="t" style="margin-top:4px">
+      <tr><th>Route</th><th>What to do</th><th>Who pays</th></tr>
+      <tr><td>GitHub Copilot <span class="c" style="color:var(--ink3)">(VS Code)</span></td>
+          <td>Nothing. If no key is set, the extension uses the editor's own models. Approve the one-time consent prompt.
+          Or set the model to <code>vscode-lm</code> to always use them.</td>
+          <td>Your Copilot plan</td></tr>
+      <tr><td>Anthropic key</td>
+          <td><b>Code Context: Set API key</b> → Anthropic → paste a key from <span class="mono">console.anthropic.com</span>.
+          Create the key inside a <b>workspace</b>, not at organisation level.</td>
+          <td>API usage</td></tr>
+      <tr><td>Google key</td>
+          <td><b>Code Context: Set API key</b> → Google, and pick a <code>gemini-*</code> model.
+          It needs an <span class="mono">AIza…</span> key — a project number won't work.</td>
+          <td>API usage</td></tr>
+    </table>
+
+    <div class="callout" style="margin-top:18px">
+      <div class="t">Not usable: Claude Pro/Max or Cursor subscriptions</div>
+      <p>Neither gives extensions access to its models. Run <b>Code Context: List editor models</b> to see
+      exactly what your editor offers.</p>
+    </div>
+
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card"><div class="lbl">Keys are stored safely</div>
+        <p>In the editor's secret storage — never in settings files or the repository.</p></div>
+      <div class="card"><div class="lbl">It costs very little</div>
+        <p>A description is well under a cent on Haiku, and each function is paid for once until its code changes.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>2</span></div>
+</section>
+
+<!-- ===================================================== 3 · reading the panel -->
+<section class="page">
+  <div class="kicker">Opening context</div>
+  <h1>Three ways in, one panel</h1>
+
+  <div class="body" style="margin-top:20px">
+    <div class="grid g3">
+      <div class="card"><div class="lbl">CodeLens</div>
+        <p>Above every function: <span class="mono" style="font-size:11px;color:var(--ink)">3 callers · 5 calls — Show context</span>. Click it to open the panel.</p></div>
+      <div class="card"><div class="lbl">Hover</div>
+        <p>Hover a function name for a quick digest: how it's reached, counts, last change. <b>Open context map</b> goes further.</p></div>
+      <div class="card"><div class="lbl">Panel</div>
+        <p>Opens beside your code. Click another function and it follows you — only when <i>you</i> move, not when an agent edits.</p></div>
+    </div>
+
+    <div class="sub" style="margin-top:24px">Reading the panel</div>
+    <div class="grid" style="grid-template-columns:1.12fr 1fr; gap:22px; align-items:start">
+      <div class="pm">
+        <div class="id"><span class="pin" style="margin-right:2px">1</span><span class="s">get_current_user()</span><span class="l">…/auth/deps.py:42</span>
+          <span class="r"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg></span><span class="pin">2</span></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span class="pin" style="margin-top:9px">3</span>
+        <div class="ai" style="flex:1">
+          <div class="h"><span class="f">Admin sign-in</span><span class="m">haiku 4 5</span></div>
+          <div class="lead">Checks the login token on every admin request and loads the signed-in user, turning away anyone not yet approved.</div>
+          <div class="risk"><span class="k">IF IT BREAKS</span><span>Every admin page stops loading for every staff member.</span></div>
+        </div></div>
+        <div style="display:flex; gap:8px; align-items:center"><span class="pin" style="margin-top:9px">4</span>
+        <div class="way" style="flex:1"><span class="k">WEB REQUEST</span><span class="v">GET /api/v1/admin/stats</span></div></div>
+        <div style="display:flex; gap:8px; align-items:flex-start"><span class="pin" style="margin-top:11px">5</span><div style="flex:1">
+        <div class="secrow"><span class="tw">▸</span><span class="n">What it does</span><span class="sm">7 steps — calls out, reads, can fail</span></div>
+        <div class="secrow"><span class="tw">▸</span><span class="n">How it got here</span><span class="sm">5 changes, latest 2026-02-02</span></div>
+        <div class="secrow"><span class="tw">▸</span><span class="n">What it touches</span><span class="sm">1 caller · 2 further out</span></div>
+        <div class="secrow"><span class="tw">▸</span><span class="n">Detail</span><span class="sm">the longer version</span></div>
+        </div></div>
+      </div>
+
+      <div class="legend">
+        <span class="pin">1</span><p><b>Which function.</b> Its name and where it lives. If the file has unsaved edits, it says <span class="mono" style="font-size:10.5px">EDITED SINCE</span> and the commit.</p>
+        <span class="pin">2</span><p><b>Re-analyse.</b> Rebuilds everything and asks the AI again. Spins amber while it works.</p>
+        <span class="pin">3</span><p><b>The plain-language summary.</b> The feature it belongs to, one sentence on what it does, and who notices if it breaks. <b>The amber left border means an AI wrote it.</b></p>
+        <span class="pin">4</span><p><b>How the world gets in.</b> The URL, scheduled job, command or event that ends up here — found by reading your framework's routing, not guessed.</p>
+        <span class="pin">5</span><p><b>Four sections, collapsed.</b> Each summary line is worth reading alone. Open one and it stays open next time.</p>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:22px">
+      <div class="t">The one rule to remember</div>
+      <p>Anything with an <b style="color:var(--acc2)">amber left border</b> was written by an AI from the evidence. Everything else —
+      steps, routes, callers, commits — was computed directly from your code and Git, and doesn't depend on a model.</p>
+    </div>
+
+    <div class="sub" style="margin-top:24px">What the AI is never allowed to do</div>
+    <div class="grid g2" style="gap:12px">
+      <div class="card"><div class="lbl red">Invent</div>
+        <p>It only sees facts the extension computed. It can't add a route, a feature name or a reason that isn't in them.</p></div>
+      <div class="card"><div class="lbl red">Declare code unused</div>
+        <p>No callers found can mean the analysis missed them, so it never calls anything dead.</p></div>
+      <div class="card"><div class="lbl red">Rewrite the step list</div>
+        <p>Each plain line is tied to a numbered step. It can't merge, drop or reorder them.</p></div>
+      <div class="card"><div class="lbl red">Sound surer than it is</div>
+        <p>Thin evidence means low confidence and a shorter answer. A guess about <i>why</i> is labelled <b>inferred</b>.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>3</span></div>
+</section>
+
+<!-- ===================================================== 4 · the sections -->
+<section class="page">
+  <div class="kicker">The four sections</div>
+  <h1>What each section tells you</h1>
+
+  <div class="body" style="margin-top:20px">
+    <div class="grid g2" style="gap:18px; align-items:start">
+      <div>
+        <h2>What it does</h2>
+        <p style="font-size:12.5px">The function's steps in order — read from its body, then put into plain words by the AI.
+        Click a step to jump to that line.</p>
+        <div class="pm" style="margin-top:10px">
+          <div class="inl"><div class="tg">AI · PLAIN LANGUAGE</div><p>Needs a login token from the user and access to the user database.</p></div>
+          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">1</span><span class="t">Checks the login token is genuine</span></div>
+          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">2</span><span class="t">Finds which user it belongs to</span></div>
+          <div class="st"><span class="n" style="color:var(--red);border-color:var(--red)">3</span><span class="t">Refuses the request if there's no user</span></div>
+          <div class="st"><span class="n" style="color:var(--acc);border-color:var(--acc)">4</span><span class="t">Hands back the user's details</span></div>
+        </div>
+        <p style="font-size:11.5px; margin-top:8px"><span style="color:var(--acc3)">●</span> reads &nbsp; <span style="color:var(--acc2)">●</span> writes &nbsp; <span style="color:var(--red)">●</span> can fail &nbsp; <span style="color:var(--acc)">●</span> returns</p>
+      </div>
+
+      <div>
+        <h2>How it got here</h2>
+        <p style="font-size:12.5px">Why the function exists, then the changes since. The commit that first added it is marked
+        <span class="mono" style="font-size:10px">ADDED HERE</span>. Click a commit to see its diff.</p>
+        <div class="pm" style="margin-top:10px">
+          <div class="inl"><div class="tg">AI · WHY IT EXISTS</div><p>Added so only approved staff could reach the admin tools, once Firebase replaced passwords.</p>
+            <p style="margin-top:5px; padding-top:5px; border-top:1px dashed #3a3a3a">Since tightened to turn away users still waiting for approval.</p></div>
+          <div class="hr"><span class="d">2026-02-02</span><span>Reject unapproved users at the door</span></div>
+          <div class="hr"><span class="d">2025-05-14</span><span>Add Firebase admin auth<span class="added">ADDED HERE</span></span></div>
+        </div>
+        <p style="font-size:11.5px; margin-top:8px">Says <b>· inferred</b> when the commits never gave a reason and the AI worked it out from what the code serves.</p>
+      </div>
+
+      <div>
+        <h2>What it touches</h2>
+        <p style="font-size:12.5px">A small map: who calls this above, what it calls below. Click any box to go there —
+        this is how you walk a codebase.</p>
+        <svg viewBox="0 0 330 150" width="100%" style="margin-top:10px; background:#1e1e1e; border:1px solid var(--line2); border-radius:9px">
+          <rect x="30" y="16" width="120" height="26" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="90" y="33" text-anchor="middle" font-size="9.5" fill="#ccc" class="mono">admin_stats()</text>
+          <rect x="180" y="16" width="120" height="26" rx="5" fill="#252526" stroke="#4a4a4a" stroke-dasharray="4 3"/><text x="240" y="33" text-anchor="middle" font-size="9.5" fill="#ccc" class="mono">export_report()</text>
+          <line x1="90" y1="42" x2="165" y2="62" stroke="#666"/><line x1="240" y1="42" x2="165" y2="62" stroke="#e08b7a" stroke-dasharray="4 3"/>
+          <rect x="95" y="62" width="140" height="30" rx="6" fill="#1c2a1f" stroke="#89d185"/><text x="165" y="81" text-anchor="middle" font-size="10" fill="#eef2f6" class="mono">get_current_user()</text>
+          <line x1="165" y1="92" x2="165" y2="110" stroke="#666"/>
+          <rect x="105" y="110" width="120" height="26" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="165" y="127" text-anchor="middle" font-size="9.5" fill="#ccc" class="mono">load_profile()</text>
+        </svg>
+        <p style="font-size:11.5px; margin-top:8px"><b>Dashed</b> lines are guesses — the name matched but no import proves the link. Treat them as leads to check.</p>
+      </div>
+
+      <div>
+        <h2>Detail</h2>
+        <p style="font-size:12.5px">The longer version for when you need it: the computed summary, test files that reference the function,
+        the commit the index was built at, and the evidence the AI cited.</p>
+        <div class="card" style="margin-top:10px">
+          <div class="lbl">Good to know</div>
+          <ul class="clean">
+            <li><b>No tests?</b> Detail says so, and the AI raises it as a caution when it matters.</li>
+            <li><b>Evidence ids</b> like <code>step:2</code> or <code>commit:827fb4e</code> show exactly which facts a sentence came from.</li>
+            <li><b>Low confidence</b> means the evidence was thin — the AI is told to say less rather than guess.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>4</span></div>
+</section>
+
+<!-- ===================================================== 5 · worked example -->
+<section class="page">
+  <div class="kicker">Worked example</div>
+  <h1>From a function to an answer</h1>
+  <p class="lede">A reviewer opens a pull request that touches <code>compute_ap_signal</code>. They've never seen it.
+  Here's what they put their cursor in — and what they get back.</p>
+
+  <div class="body" style="margin-top:20px">
+<pre><span class="k">def</span> <span class="g">compute_ap_signal</span>(ap_payments):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=<span class="s">90</span>)
+    valid = []
+
+    <span class="k">for</span> p <span class="k">in</span> ap_payments:
+        <span class="c"># must have both dates</span>
+        due_raw = p.get(<span class="s">"due_date"</span>)
+        pay_raw = p.get(<span class="s">"payment_date"</span>)
+        <span class="k">if not</span> due_raw <span class="k">or not</span> pay_raw:
+            <span class="k">continue</span>
+
+        paid = parse_utc(pay_raw)
+        <span class="c"># only consider payments made in the last 90 days</span>
+        <span class="k">if</span> paid &lt; cutoff:
+            <span class="k">continue</span>
+        valid.append((paid - parse_utc(due_raw)).days)
+
+    late = [d <span class="k">for</span> d <span class="k">in</span> valid <span class="k">if</span> d &gt; <span class="s">0</span>]
+    <span class="k">return</span> round(len(late) / len(valid), <span class="s">2</span>) <span class="k">if</span> valid <span class="k">else</span> <span class="g">None</span></pre>
+
+    <div class="grid" style="grid-template-columns:1fr 1fr; gap:18px; margin-top:16px; align-items:start">
+      <div>
+        <div class="sub" style="margin-top:0">Computed from the code — no AI</div>
+        <div class="pm">
+          <div class="st"><span class="n">1</span><span class="t">works out cutoff</span></div>
+          <div class="st"><span class="n">2</span><span class="t">goes through each ap_payments</span></div>
+          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">3</span><span class="t">looks up due raw</span></div>
+          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">4</span><span class="t">looks up pay raw</span></div>
+          <div class="st"><span class="n">5</span><span class="t">parse utc</span></div>
+          <div class="st"><span class="n">6</span><span class="t">adds to valid</span></div>
+          <div class="st"><span class="n">7</span><span class="t">keeps only the valid where d &gt; 0</span></div>
+          <div class="st"><span class="n" style="color:var(--acc);border-color:var(--acc)">8</span><span class="t">returns round(len(late) / len(valid), 2)…</span></div>
+        </div>
+        <p style="font-size:11.5px; margin-top:8px">Real extractor output. Accurate, but in the code's own vocabulary.</p>
+      </div>
+      <div>
+        <div class="sub" style="margin-top:0">With the AI layer — same steps, same order</div>
+        <div class="pm">
+          <div class="inl" style="margin-top:0"><div class="tg">AI · PLAIN LANGUAGE</div>
+          <div class="st"><span class="n">1</span><span class="t">Sets the window to the last 90 days</span></div>
+          <div class="st"><span class="n">2</span><span class="t">Goes through each supplier payment</span></div>
+          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">3</span><span class="t">Reads when the bill was due</span></div>
+          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">4</span><span class="t">Reads when it was actually paid</span></div>
+          <div class="st"><span class="n">5</span><span class="t">Turns the payment date into a comparable time</span></div>
+          <div class="st"><span class="n">6</span><span class="t">Records how many days late or early it was</span></div>
+          <div class="st"><span class="n">7</span><span class="t">Keeps only the payments that were late</span></div>
+          <div class="st"><span class="n" style="color:var(--acc);border-color:var(--acc)">8</span><span class="t">Returns the share paid late, e.g. 0.25</span></div></div>
+        </div>
+        <p style="font-size:11.5px; margin-top:8px">Illustrative — the wording varies between runs; the numbering never does.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="lbl amber">And at the top of the panel</div>
+      <p><b style="color:var(--acc2)">SUPPLIER PAYMENT SCORING</b> — Works out what share of a supplier's bills were paid late in the last
+      90 days. <span style="color:var(--ink3)">If it breaks:</span> payment-risk scores go wrong or blank, and anything that ranks suppliers by them misreads who is reliable.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>5</span></div>
+</section>
+
+<!-- ===================================================== 6 · changes, privacy, cost -->
+<section class="page">
+  <div class="kicker">Living with it</div>
+  <h1>When the code changes</h1>
+  <p class="lede">Assume an AI agent is editing your code — Cursor's agent in the editor, or Claude Code writing to disk.
+  Code Context notices. It never re-analyses behind your back.</p>
+
+  <div class="body" style="margin-top:20px">
+    <div class="grid" style="grid-template-columns:1.05fr 1fr; gap:20px; align-items:start">
+      <div class="pm">
+        <div class="id"><span class="s">get_current_user()</span><span class="l">…/auth/deps.py:42</span>
+          <span class="r" style="color:var(--acc2); border:1px solid #3a3a3a"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg></span></div>
+        <div class="stale"><span class="dot"></span><span class="msg">This function changed since it was analysed.</span><span class="act">Re-analyse</span></div>
+        <div class="ai" style="opacity:.85">
+          <div class="h"><span class="f">Admin sign-in</span><span class="m">haiku 4 5</span></div>
+          <div class="lead">Checks the login token on every admin request and loads the signed-in user…</div>
+        </div>
+      </div>
+      <ul class="clean">
+        <li><b>You're told, not interrupted.</b> Within about half a second of the function changing, the bar appears and the button turns amber. The old answer stays readable.</li>
+        <li><b>Only real changes count.</b> Edits elsewhere in the file don't flag it. Undo the change and the bar goes away.</li>
+        <li><b>You decide when to ask again.</b> Click the bar, the ↻ button, or the function's CodeLens.</li>
+        <li><b>Why not automatically?</b> Agents write in bursts. Re-analysing each burst would describe half-written code and bill you for it.</li>
+      </ul>
+    </div>
+
+    <div class="sub" style="margin-top:26px">What leaves your machine</div>
+    <div class="grid g2">
+      <div class="card"><div class="lbl">With AI off (default)</div>
+        <p>Nothing. Indexing, steps, routes, callers and history all run locally against your files and Git.</p></div>
+      <div class="card"><div class="lbl amber">With AI on</div>
+        <p>For the function you open: its first 80 lines, its routes, caller and callee names with file paths,
+        commit messages, and co-changed file names. Sent to the provider you chose — nothing else.</p></div>
+    </div>
+
+    <div class="sub" style="margin-top:22px">What it costs</div>
+    <table class="t">
+      <tr><th>Situation</th><th>AI call?</th></tr>
+      <tr><td>Opening a function for the first time</td><td>Yes — one call, typically well under a cent on Haiku</td></tr>
+      <tr><td>Opening it again, unchanged</td><td>No — answered from the cache</td></tr>
+      <tr><td>Editing elsewhere in the file</td><td>No — the evidence didn't change</td></tr>
+      <tr><td>The function itself changed, and you click Re-analyse</td><td>Yes</td></tr>
+      <tr><td>Re-analyse with nothing changed</td><td>Yes — you asked for a fresh answer</td></tr>
+    </table>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>6</span></div>
+</section>
+
+<!-- ===================================================== 7 · reference -->
+<section class="page">
+  <div class="kicker">Reference</div>
+  <h1>Commands, settings, answers</h1>
+
+  <div class="body" style="margin-top:20px">
+    <div class="grid g2" style="gap:20px; align-items:start">
+      <div>
+        <div class="sub" style="margin-top:0">Commands <span style="color:var(--ink4)">· ⌘⇧P, then type “Code Context”</span></div>
+        <table class="t">
+          <tr><td>Show context panel</td><td>Open the panel for the function at the cursor</td></tr>
+          <tr><td>Re-analyse this function</td><td>Same as the ↻ button</td></tr>
+          <tr><td>Set API key</td><td>Anthropic or Google, into secret storage</td></tr>
+          <tr><td>List editor models</td><td>What your editor offers extensions</td></tr>
+          <tr><td>Clear AI narration cache</td><td>Forget every saved description</td></tr>
+          <tr><td>Re-index workspace</td><td>Rebuild the index from scratch</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="sub" style="margin-top:0">Settings</div>
+        <table class="t">
+          <tr><td><code>ai.enabled</code></td><td>Plain-language layer. Default off</td></tr>
+          <tr><td><code>ai.model</code></td><td><code>claude-haiku-4-5</code> (default), <code>vscode-lm</code>, <code>gemini-*</code>, <code>claude-sonnet-5</code>, <code>claude-opus-5</code></td></tr>
+          <tr><td><code>ai.editorModel</code></td><td>Which editor model, e.g. <code>haiku</code></td></tr>
+          <tr><td><code>codeLens</code></td><td>Show the lens above functions</td></tr>
+          <tr><td><code>maxFiles</code></td><td>Python files indexed (400)</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub" style="margin-top:26px">Troubleshooting</div>
+    <div class="grid g2" style="gap:12px">
+      <div class="card"><h3>No CodeLens above functions</h3>
+        <p>Reload the window. If it persists, <b>Developer: Show Logs → Extension Host</b> will say why.</p></div>
+      <div class="card"><h3>“No Anthropic API key”</h3>
+        <p>Run <b>Set API key</b>, or on VS Code install GitHub Copilot and leave the key unset.</p></div>
+      <div class="card"><h3>400: “not scoped to a workspace”</h3>
+        <p>The key was created at organisation level. Create a new one inside a workspace.</p></div>
+      <div class="card"><h3>Gemini keeps returning 503</h3>
+        <p>That's Google's capacity, not your setup. It retries once; if it keeps failing, switch to Haiku.</p></div>
+      <div class="card"><h3>Steps show code words, not plain ones</h3>
+        <p>The AI's answer hasn't arrived or couldn't be matched. Click ↻; unmatched steps fall back to the computed label.</p></div>
+      <div class="card"><h3>A caller is missing</h3>
+        <p>Calls made dynamically — <code>getattr</code>, dispatch tables — can't be seen by reading names. Nothing is ever labelled unused for this reason.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · User manual</span><span>7</span></div>
+</section>
+
+</body>
+</html>

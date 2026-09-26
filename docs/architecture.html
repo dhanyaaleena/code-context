@@ -1,0 +1,404 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Code Context — Architecture</title>
+<link rel="stylesheet" href="docs.css">
+<style>
+  .stage{ display:grid; grid-template-columns:30px 118px 1fr; gap:12px; align-items:baseline;
+          padding:10px 0; border-bottom:1px solid var(--line); }
+  .stage:last-child{ border-bottom:0; }
+  .stage .no{ font:650 13px/1 var(--mono); color:var(--acc); }
+  .stage .nm{ font-size:12.5px; font-weight:650; color:var(--ink); }
+  .stage p{ font-size:12px; line-height:1.5; }
+  .stage .src{ font:9px/1 var(--mono); color:var(--ink4); margin-top:3px; }
+  .prin{ display:grid; grid-template-columns:26px 1fr; gap:4px 10px; margin-bottom:14px; }
+  .prin .num{ font:650 13px/1.3 var(--mono); color:var(--acc); }
+  .prin .t{ font-size:13.5px; font-weight:650; color:var(--ink); margin-bottom:3px; }
+  .prin p{ font-size:12.5px; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================== 1 · cover -->
+<section class="page cover">
+  <div class="rule"></div>
+  <div class="kicker">Architecture</div>
+  <h1>Code<br>Context</h1>
+  <div style="font-size:19px; color:var(--acc); margin-top:18px; font-weight:500">How it works, and why it's built this way.</div>
+  <p class="lede" style="max-width:580px">
+    An editor extension that reconstructs how an unfamiliar function fits into a system — its steps,
+    the routes and jobs that reach it, its callers, its history — from source, Git and framework routing.
+    A language model is used for one thing only: turning those facts into sentences.
+  </p>
+  <p class="lede" style="max-width:580px; color:var(--ink3); font-size:13.5px">
+    For engineers reviewing the design. Six pages: principles, the component map, the index, the
+    context pipeline, the AI layer, and the runtime lifecycle with known limits.
+  </p>
+  <div style="display:flex; gap:9px; margin-top:34px; flex-wrap:wrap">
+    <span class="tag on">Working extension</span>
+    <span class="tag on">Python</span>
+    <span class="tag on">VS Code · Cursor</span>
+    <span class="tag on">Claude · Gemini · Copilot</span>
+    <span class="tag off">No backend yet</span>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>1</span></div>
+</section>
+
+<!-- ===================================================== 2 · principles -->
+<section class="page">
+  <div class="kicker">Design principles</div>
+  <h1>Facts first, words second</h1>
+  <p class="lede">Every design decision below follows from one split: <b>deterministic analysis decides what is true;
+  the model only decides how to say it.</b> A wrong sentence can be traced to a wrong fact, and a wrong fact to a line of code.</p>
+
+  <div class="body" style="margin-top:24px">
+    <div class="prin"><div class="num">01</div><div>
+      <div class="t">The model translates; it never discovers</div>
+      <p>Routes, steps, callers and commits are all computed before any model is called. It receives a numbered evidence
+      bundle and is told to use nothing else. Turn AI off and you lose sentences, not facts.</p></div></div>
+    <div class="prin"><div class="num">02</div><div>
+      <div class="t">Grounded by shape, not by prompt</div>
+      <p>Instructions are necessary but not sufficient. Cited evidence ids are checked against the ids actually issued;
+      each plain-language step must name the step it translates; a reason is labelled <i>inferred</i> unless a commit stated it.</p></div></div>
+    <div class="prin"><div class="num">03</div><div>
+      <div class="t">Confidence is structural</div>
+      <p>Every caller edge is <b>resolved</b> (same file, or imported) or <b>heuristic</b> (name match only), and is drawn
+      accordingly. The tool is designed to be visibly unsure rather than confidently wrong.</p></div></div>
+    <div class="prin"><div class="num">04</div><div>
+      <div class="t">Never block on the model</div>
+      <p>The computed panel renders immediately; the narration folds in when it arrives, and a cache hit shows no loading state at all.</p></div></div>
+    <div class="prin"><div class="num">05</div><div>
+      <div class="t">The reader decides when to spend</div>
+      <p>Changed code is flagged stale, never re-analysed in the background. Agents write in bursts; describing each one
+      would bill for half-written code nobody asked about.</p></div></div>
+    <div class="prin"><div class="num">06</div><div>
+      <div class="t">Local by default</div>
+      <p>Indexing and analysis run against the working tree and Git. Nothing leaves the machine until AI is switched on,
+      and then only a bounded bundle for the one function opened.</p></div></div>
+
+    <div class="sub" style="margin-top:22px">Status</div>
+    <table class="t">
+      <tr><th>Area</th><th>State</th></tr>
+      <tr><td>Index, context pipeline, entry points, history</td><td><span class="tag on">Built</span></td></tr>
+      <tr><td>AI layer — three providers, grounding, cache</td><td><span class="tag on">Built</span></td></tr>
+      <tr><td>Staleness, re-analyse, disk-persisted index</td><td><span class="tag on">Built</span> <span style="color:var(--ink3); font-size:11.5px">— disk cold start not yet exercised on a large repo</span></td></tr>
+      <tr><td>Shared backend, team cache, PR/issue metadata, other languages</td><td><span class="tag off">Designed, not built</span></td></tr>
+    </table>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>2</span></div>
+</section>
+
+<!-- ===================================================== 3 · component map -->
+<section class="page">
+  <div class="kicker">Component map</div>
+  <h1>Five layers, one output shape</h1>
+  <p class="lede">Everything converges on a single <code>ContextResponse</code>. Nothing above the context builder knows the data is
+  computed locally, so moving analysis to a server means replacing one function.</p>
+
+  <div class="body" style="margin-top:20px">
+    <svg viewBox="0 0 678 400" width="100%">
+      <defs>
+        <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#48525d"/></marker>
+        <marker id="aa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#f0b866"/></marker>
+      </defs>
+      <!-- layer labels -->
+      <g font-size="8.5" fill="#6e7b88" class="mono" letter-spacing="1.2">
+        <text x="0" y="30">SURFACES</text><text x="0" y="108">ORCHESTRATION</text>
+        <text x="0" y="196">ANALYSIS</text><text x="0" y="290">DATA</text><text x="0" y="372">SOURCES</text>
+      </g>
+      <!-- surfaces -->
+      <g font-size="11">
+        <rect x="120" y="10" width="150" height="36" rx="7" fill="#171c22" stroke="#323b46"/><text x="195" y="32" text-anchor="middle" fill="#eef2f6">CodeLens</text>
+        <rect x="290" y="10" width="150" height="36" rx="7" fill="#171c22" stroke="#323b46"/><text x="365" y="32" text-anchor="middle" fill="#eef2f6">Hover</text>
+        <rect x="460" y="10" width="218" height="36" rx="7" fill="#171c22" stroke="#7fd1b9"/><text x="569" y="32" text-anchor="middle" fill="#eef2f6">Panel (webview)</text>
+      </g>
+      <!-- orchestration -->
+      <rect x="120" y="86" width="558" height="40" rx="7" fill="#12161b" stroke="#323b46"/>
+      <text x="136" y="104" font-size="11" fill="#eef2f6" font-weight="600">extension.ts</text>
+      <text x="136" y="118" font-size="9.5" fill="#a9b4c0">focus tracking · staleness · commands · cursor-follow · narration scheduling</text>
+      <text x="536" y="104" font-size="11" fill="#eef2f6" font-weight="600">cache.ts</text>
+      <text x="536" y="118" font-size="9.5" fill="#a9b4c0">memo per doc version</text>
+      <!-- analysis -->
+      <rect x="120" y="164" width="350" height="56" rx="7" fill="#171c22" stroke="#7fd1b9"/>
+      <text x="136" y="183" font-size="11" fill="#eef2f6" font-weight="600">Context builder</text>
+      <text x="136" y="198" font-size="9.5" fill="#a9b4c0" class="mono">context.ts · workflow.ts · entryPoints.ts</text>
+      <text x="136" y="211" font-size="9.5" fill="#a9b4c0">steps · callers · callees · routes · feature · impact</text>
+      <rect x="490" y="164" width="188" height="56" rx="7" fill="#1d1a14" stroke="#f0b866"/>
+      <text x="506" y="183" font-size="11" fill="#f0b866" font-weight="600">AI narrator</text>
+      <text x="506" y="198" font-size="9.5" fill="#a9b4c0" class="mono">ai.ts</text>
+      <text x="506" y="211" font-size="9.5" fill="#a9b4c0">bundle · route · validate</text>
+      <!-- data -->
+      <rect x="120" y="262" width="230" height="50" rx="7" fill="#171c22" stroke="#323b46"/>
+      <text x="136" y="281" font-size="11" fill="#eef2f6" font-weight="600">Repo index</text>
+      <text x="136" y="298" font-size="9.5" fill="#a9b4c0">files · symbols · names · entry points</text>
+      <rect x="490" y="262" width="188" height="50" rx="7" fill="#171c22" stroke="#323b46"/>
+      <text x="506" y="281" font-size="11" fill="#eef2f6" font-weight="600">Narration cache</text>
+      <text x="506" y="298" font-size="9.5" fill="#a9b4c0">model + hash(bundle)</text>
+      <!-- sources -->
+      <g font-size="10.5">
+        <rect x="120" y="348" width="110" height="36" rx="7" fill="#0a0d10" stroke="#262d36"/><text x="175" y="370" text-anchor="middle" fill="#a9b4c0">Working tree</text>
+        <rect x="240" y="348" width="110" height="36" rx="7" fill="#0a0d10" stroke="#262d36"/><text x="295" y="370" text-anchor="middle" fill="#a9b4c0">Disk cache</text>
+        <rect x="370" y="348" width="100" height="36" rx="7" fill="#0a0d10" stroke="#262d36"/><text x="420" y="370" text-anchor="middle" fill="#a9b4c0">Git</text>
+        <rect x="490" y="348" width="188" height="36" rx="7" fill="#0a0d10" stroke="#f0b866" stroke-dasharray="4 3"/><text x="584" y="370" text-anchor="middle" fill="#f0b866">Claude · Gemini · vscode.lm</text>
+      </g>
+      <!-- arrows -->
+      <g stroke="#48525d" stroke-width="1.2" fill="none" marker-end="url(#ar)">
+        <path d="M195 46 V84"/><path d="M365 46 V84"/><path d="M569 46 V84"/>
+        <path d="M295 126 V162"/>
+        <path d="M295 220 V260"/>
+        <path d="M175 346 V314"/><path d="M295 346 V314"/>
+        <path d="M420 346 V222"/>
+      </g>
+      <g stroke="#f0b866" stroke-width="1.2" fill="none" marker-end="url(#aa)">
+        <path d="M600 126 V162"/><path d="M470 192 H488"/><path d="M584 220 V260"/><path d="M584 312 V346"/>
+      </g>
+      <text x="428" y="284" font-size="8.5" fill="#6e7b88" class="mono">log -L</text><text x="428" y="296" font-size="8.5" fill="#6e7b88" class="mono">co-change</text>
+    </svg>
+
+    <table class="t" style="margin-top:18px">
+      <tr><th>Module</th><th>Owns</th></tr>
+      <tr><td><code>pythonScan.ts</code></td><td>Symbols and body ranges by regex — balancing parentheses so wrapped signatures don't truncate the body</td></tr>
+      <tr><td><code>repoIndex.ts</code></td><td>The index: build once, persist to disk keyed by commit, update one file at a time, inverted name index</td></tr>
+      <tr><td><code>workflow.ts</code></td><td>A function body → typed, ordered steps; parameters and injected dependencies</td></tr>
+      <tr><td><code>entryPoints.ts</code></td><td>Routes, tasks, schedules, commands, events and signals across frameworks</td></tr>
+      <tr><td><code>context.ts</code></td><td>Assembles <code>ContextResponse</code> — callers with confidence, callees, feature, impact, tests</td></tr>
+      <tr><td><code>git.ts</code></td><td>Symbol-scoped history with bodies, co-change, changed-since and dirty-file sets</td></tr>
+      <tr><td><code>ai.ts</code></td><td>Evidence bundle, schema, provider routing, validation, cache</td></tr>
+      <tr><td><code>media/panel.js</code></td><td>The panel: glance, four sections, the map, stale bar — themed from editor tokens</td></tr>
+    </table>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>3</span></div>
+</section>
+
+<!-- ===================================================== 4 · the index -->
+<section class="page">
+  <div class="kicker">The index</div>
+  <h1>Index once, then touch only what changed</h1>
+  <p class="lede">A single panel open performs dozens of "who mentions this name?" lookups — for callers, for the
+  transitive hop, for walking up to entry points. The index exists to make each of those a map read.</p>
+
+  <div class="body" style="margin-top:20px">
+    <div class="grid g3">
+      <div class="card"><div class="lbl">Build once</div>
+        <p>On activation, in the background: every <code>.py</code> file (capped by <code>maxFiles</code>), its symbols, its
+        identifiers, and the workspace's entry points.</p></div>
+      <div class="card"><div class="lbl">Update one file</div>
+        <p>A save or a write from outside the editor re-reads that file, swaps its slice of the name index, and rescans entry
+        points. The rest is untouched.</p></div>
+      <div class="card"><div class="lbl">Persist by commit</div>
+        <p>Saved to extension storage with the HEAD commit. A cold start asks Git what changed since, and re-reads only that.</p></div>
+    </div>
+
+    <div class="sub" style="margin-top:24px">Cold start</div>
+    <svg viewBox="0 0 678 172" width="100%">
+      <defs><marker id="a2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#48525d"/></marker></defs>
+      <g font-size="10.5">
+        <rect x="0" y="8" width="128" height="46" rx="7" fill="#171c22" stroke="#323b46"/><text x="64" y="28" text-anchor="middle" fill="#eef2f6">Cache on disk?</text><text x="64" y="43" text-anchor="middle" fill="#6e7b88" font-size="9">same root · version · cap</text>
+        <rect x="150" y="8" width="128" height="46" rx="7" fill="#171c22" stroke="#323b46"/><text x="214" y="28" text-anchor="middle" fill="#eef2f6">Cached commit</text><text x="214" y="43" text-anchor="middle" fill="#6e7b88" font-size="9">still reachable?</text>
+        <rect x="300" y="8" width="170" height="46" rx="7" fill="#171c22" stroke="#7fd1b9"/><text x="385" y="28" text-anchor="middle" fill="#eef2f6">Suspects =</text><text x="385" y="43" text-anchor="middle" fill="#a9b4c0" font-size="9" class="mono">diff(cached..HEAD) ∪ status</text>
+        <rect x="492" y="8" width="186" height="46" rx="7" fill="#171c22" stroke="#7fd1b9"/><text x="585" y="28" text-anchor="middle" fill="#eef2f6">Re-read suspects</text><text x="585" y="43" text-anchor="middle" fill="#6e7b88" font-size="9">reuse every other file as-is</text>
+        <rect x="150" y="112" width="128" height="46" rx="7" fill="#0a0d10" stroke="#e08b7a" stroke-dasharray="4 3"/><text x="214" y="132" text-anchor="middle" fill="#e08b7a">Full build</text><text x="214" y="147" text-anchor="middle" fill="#6e7b88" font-size="9">the safe fallback</text>
+        <rect x="492" y="112" width="186" height="46" rx="7" fill="#0a0d10" stroke="#323b46"/><text x="585" y="132" text-anchor="middle" fill="#eef2f6">Rescan symbols</text><text x="585" y="147" text-anchor="middle" fill="#6e7b88" font-size="9">and entry points, from text</text>
+      </g>
+      <g stroke="#48525d" stroke-width="1.2" fill="none" marker-end="url(#a2)">
+        <path d="M128 31 H148"/><path d="M278 31 H298"/><path d="M470 31 H490"/><path d="M585 54 V110"/>
+        <path d="M64 54 V135 H148"/><path d="M214 54 V110"/>
+      </g>
+      <g font-size="8.5" fill="#6e7b88" class="mono"><text x="131" y="25">yes</text><text x="281" y="25">yes</text><text x="70" y="96">no</text><text x="220" y="86">no — rebased away</text></g>
+    </svg>
+    <p style="font-size:12px; margin-top:4px">Only file text is cached; symbols and entry points are always recomputed, so a change to the scanner can never
+    be masked by stale derived data. Caches above 24 MB are not written — a repository that size is cheaper to rescan than to serialise.</p>
+
+    <div class="sub" style="margin-top:22px">The inverted name index</div>
+    <div class="grid" style="grid-template-columns:1fr 1fr; gap:16px; align-items:start">
+<pre><span class="c">// identifier → files that mention it</span>
+<span class="s">"get_current_user"</span> → { admin/routes.py,
+                        auth/deps.py,
+                        reports/export.py }
+<span class="s">"compute_ap_signal"</span> → { scoring/ap.py,
+                         scoring/jobs.py }</pre>
+      <div>
+        <p style="font-size:12.5px">Caller search used to be a regex sweep of every file, for every lookup. Now the index returns the
+        handful of files that mention the name, and only those are scanned for real uses.</p>
+        <p style="font-size:12.5px">Measured on a synthetic 400-file, 4.9 MB corpus: <b>16 ms → 0.007 ms</b> per lookup. More importantly,
+        cost now grows with how often a name is used, not with the size of the repository.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>4</span></div>
+</section>
+
+<!-- ===================================================== 5 · the context pipeline -->
+<section class="page">
+  <div class="kicker">Building a context</div>
+  <h1>Eight stages, all deterministic</h1>
+  <p class="lede">From the function at the cursor to a <code>ContextResponse</code>. Memoised per document version, so the
+  CodeLens, the hover and the panel share one computation.</p>
+
+  <div class="body" style="margin-top:18px">
+    <div class="stage"><span class="no">1</span><span class="nm">Symbol</span><div>
+      <p>Find the <code>def</code> or <code>class</code> enclosing the cursor and its full body. Parentheses are balanced first, because a
+      wrapped signature's closing <code>):</code> sits at the definition's own indent and used to end the body early.</p></div></div>
+    <div class="stage"><span class="no">2</span><span class="nm">Steps</span><div>
+      <p>Read the body into typed steps — reads, writes, calls, failures, branches, loops, filters, returns. Conversions like
+      <code>to_dict()</code> are dropped; an <code>except</code> tail folds into one step; a <code>Depends(get_db)</code> becomes a requirement, not a step.</p></div></div>
+    <div class="stage"><span class="no">3</span><span class="nm">Callers</span><div>
+      <p>Candidates come from the name index; each use is kept as a call or a passed reference. <b>Resolved</b> if in the defining file or
+      the file imports the name, otherwise <b>heuristic</b>. One further hop gives transitive impact.</p></div></div>
+    <div class="stage"><span class="no">4</span><span class="nm">Callees</span><div>
+      <p>Names called from the body, resolved to definitions in the repository, or marked external with the module they come from.</p></div></div>
+    <div class="stage"><span class="no">5</span><span class="nm">Entry points</span><div>
+      <p>FastAPI and Flask routes with prefixes composed across <code>APIRouter</code> and <code>include_router</code>; Celery, APScheduler,
+      Click, Typer, startup events, Django signals. The framework is read from imports, since <code>@bp.route</code> looks identical in both.
+      Functions with no decorator inherit the routes of the handlers above them.</p></div></div>
+    <div class="stage"><span class="no">6</span><span class="nm">Feature</span><div>
+      <p>The directory it belongs to, skipping containers like <code>apps/</code> and <code>src/</code>, plus files that keep being committed
+      alongside it — ignoring sweeping commits of more than 20 files and requiring at least two co-occurrences.</p></div></div>
+    <div class="stage"><span class="no">7</span><span class="nm">History</span><div>
+      <p><code>git log -L :symbol:file</code> — genuinely symbol-scoped — with commit bodies, trailers stripped. The commit that introduced the
+      symbol is always kept, however old, because it is the only one that says why it exists.</p></div></div>
+    <div class="stage"><span class="no">8</span><span class="nm">Tests &amp; freshness</span><div>
+      <p>Test files that reference it, by path convention; the commit the answer reflects; whether the buffer has unsaved edits.</p></div></div>
+
+    <div class="callout" style="margin-top:16px">
+      <div class="t">Where resolution is weakest</div>
+      <p>Regex resolution cannot see <code>getattr</code> dispatch, registries or dependency injection by string. Those are false negatives, which is
+      why "no callers" is never presented as "unused". A real resolver — Pyright or Jedi — is the single biggest accuracy upgrade available.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>5</span></div>
+</section>
+
+<!-- ===================================================== 6 · the AI layer -->
+<section class="page">
+  <div class="kicker">The AI layer</div>
+  <h1>One call, fenced in</h1>
+  <p class="lede">A single structured request per function. The model sees a numbered bundle of computed facts and returns
+  a fixed schema; everything it returns is checked before it reaches the screen.</p>
+
+  <div class="body" style="margin-top:18px">
+    <div class="grid" style="grid-template-columns:1.08fr 1fr; gap:16px; align-items:start">
+      <div>
+        <div class="sub" style="margin-top:0">The evidence bundle</div>
+<pre><span class="k">SYMBOL</span>: get_current_user()
+<span class="k">SOURCE</span>: <span class="c">…first 80 lines…</span>
+<span class="k">HOW THE OUTSIDE WORLD REACHES IT</span>:
+  <span class="g">[entry:0]</span> http — GET /api/v1/admin/stats
+<span class="k">WHAT IT DOES, IN ORDER</span>:
+  <span class="g">[step:0]</span> call — verify id token
+  <span class="g">[step:1]</span> read — looks up user id
+  <span class="g">[step:2]</span> error — fails with 401 when …
+<span class="k">USED BY</span>:  <span class="g">[caller:0]</span> routes.admin_stats (resolved)
+<span class="k">WHY IT WAS ADDED</span>:
+  <span class="g">[commit:827fb4e]</span> Add Firebase admin auth
+    reason given: <span class="c">…commit body…</span>
+<span class="k">CHANGED SINCE</span>:  <span class="g">[commit:2cd9272]</span> …
+<span class="k">TESTS</span>: 0 test file(s) reference it.</pre>
+      </div>
+      <div>
+        <div class="sub" style="margin-top:0">What comes back</div>
+        <table class="t">
+          <tr><td><code>featureName</code></td><td>Product area, in product words</td></tr>
+          <tr><td><code>headline</code> · <code>risk</code></td><td>What it does; who notices if it breaks</td></tr>
+          <tr><td><code>steps[]</code></td><td><code>{n, text}</code> — one per numbered step</td></tr>
+          <tr><td><code>origin</code> · <code>history</code></td><td>Why it was built; how that changed</td></tr>
+          <tr><td><code>originBasis</code></td><td><code>stated</code> or <code>inferred</code></td></tr>
+          <tr><td><code>watchOut[]</code></td><td>≤ 3 cautions the evidence supports</td></tr>
+          <tr><td><code>confidence</code></td><td>Drops to <code>low</code> on thin evidence</td></tr>
+          <tr><td><code>evidence[]</code></td><td>The ids it relied on</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="sub" style="margin-top:20px">Checked after it returns</div>
+    <div class="grid g2" style="gap:12px">
+      <div class="card"><h3>Evidence ids must be real</h3><p>Cited ids are filtered to those actually issued, capped at five. Models otherwise cite section headings.</p></div>
+      <div class="card"><h3>Steps are placed by number</h3><p>Each line names its step; 0- or 1-based numbering is detected. A miscount costs one line, which falls back to the computed label.</p></div>
+      <div class="card"><h3>"Stated" has to be earned</h3><p>With no commits in the bundle, <code>originBasis</code> is forced to <code>inferred</code> whatever the model says.</p></div>
+      <div class="card"><h3>Shape is never trusted</h3><p>All three providers get the same schema; the reply is shape-checked either way before use.</p></div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; align-items:start">
+      <div>
+        <div class="sub" style="margin-top:0">Routing</div>
+        <table class="t">
+          <tr><td><code>claude-*</code> + key</td><td>Anthropic, schema-constrained output</td></tr>
+          <tr><td><code>gemini-*</code> + key</td><td>Google, JSON-schema response</td></tr>
+          <tr><td><code>vscode-lm</code></td><td>Editor models (Copilot) — schema in prompt, parsed leniently</td></tr>
+          <tr><td>No key set</td><td>Falls back to editor models; the panel names who answered</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="sub" style="margin-top:0">Caching &amp; cost</div>
+        <p style="font-size:12px">Keyed by <b>model + SHA-256 of the bundle</b>. The bundle has no line numbers, so edits elsewhere in the file replay for free.
+        Re-analyse bypasses the read and overwrites the entry. One retry on 429/503. Roughly 2–3k tokens in, a few hundred out — well under a cent on Haiku.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>6</span></div>
+</section>
+
+<!-- ===================================================== 7 · runtime + limits -->
+<section class="page">
+  <div class="kicker">Runtime</div>
+  <h1>Open, render, narrate — then watch</h1>
+
+  <div class="body" style="margin-top:20px">
+    <svg viewBox="0 0 678 222" width="100%">
+      <defs><marker id="a3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#48525d"/></marker>
+            <marker id="a4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#f0b866"/></marker></defs>
+      <g font-size="10" fill="#eef2f6" text-anchor="middle">
+        <text x="60" y="14">Reader</text><text x="220" y="14">Extension</text><text x="400" y="14">Panel</text><text x="590" y="14">Model</text>
+      </g>
+      <g stroke="#262d36"><line x1="60" y1="22" x2="60" y2="218"/><line x1="220" y1="22" x2="220" y2="218"/><line x1="400" y1="22" x2="400" y2="218"/><line x1="590" y1="22" x2="590" y2="218"/></g>
+      <g stroke-width="1.2" fill="none">
+        <path d="M60 40 H216" stroke="#48525d" marker-end="url(#a3)"/>
+        <path d="M220 68 H396" stroke="#48525d" marker-end="url(#a3)"/>
+        <path d="M220 96 H586" stroke="#f0b866" marker-end="url(#a4)"/>
+        <path d="M590 124 H404" stroke="#f0b866" marker-end="url(#a4)"/>
+        <path d="M60 158 H216" stroke="#48525d" stroke-dasharray="4 3" marker-end="url(#a3)"/>
+        <path d="M220 186 H396" stroke="#48525d" marker-end="url(#a3)"/>
+        <path d="M400 210 H224" stroke="#48525d" stroke-dasharray="2 3" marker-end="url(#a3)"/>
+      </g>
+      <g font-size="9.5" fill="#a9b4c0">
+        <text x="66" y="35">opens the panel (lens, hover, command)</text>
+        <text x="226" y="63">computed context — renders at once</text>
+        <text x="226" y="91">evidence bundle (skipped on a cache hit)</text>
+        <text x="410" y="119">narration — folded in; loading shown only after 150 ms</text>
+        <text x="66" y="153">an agent edits the function</text>
+        <text x="226" y="181">source ≠ snapshot → stale bar</text>
+        <text x="232" y="205">reader clicks Re-analyse → back to the top</text>
+      </g>
+    </svg>
+
+    <div class="grid g2" style="gap:12px; margin-top:14px">
+      <div class="card"><div class="lbl">Focus</div>
+        <p>The panel tracks <code>{file, qualified name, line, source}</code>. By name, because an edit above the function moves every line;
+        the line only breaks ties and follows a rename in place.</p></div>
+      <div class="card"><div class="lbl">Staleness</div>
+        <p>Buffer edits and on-disk writes both trigger a 400 ms check: re-find the function, compare its source to the snapshot.
+        Edits elsewhere don't count; undo clears the flag. It never calls the model.</p></div>
+      <div class="card"><div class="lbl">Cursor-follow</div>
+        <p>The panel follows clicks, arrow keys and go-to-definition. Selection moves caused by an edit carry no kind and are ignored,
+        so an agent dragging the cursor doesn't re-analyse.</p></div>
+      <div class="card"><div class="lbl">Keeping the index current</div>
+        <p>A file watcher catches writes from Claude Code, Git or any other tool; saves update one file. Both refresh CodeLens counts.</p></div>
+    </div>
+
+    <div class="sub" style="margin-top:24px">Known limits, and what comes next</div>
+    <table class="t">
+      <tr><th>Limit today</th><th>Direction</th></tr>
+      <tr><td>Regex resolution misses dynamic calls</td><td>Pyright or Jedi for callers and callees; keep the confidence labels</td></tr>
+      <tr><td>Python only</td><td>Per-language scanners behind the same <code>ContextResponse</code></td></tr>
+      <tr><td>Per-machine index and cache</td><td>A backend with a shared cache keyed by repo + commit + symbol</td></tr>
+      <tr><td>PR numbers parsed from subjects</td><td>Fetch PR and issue text — the richest source of <i>why</i></td></tr>
+      <tr><td>First workspace folder only, 400-file cap</td><td>Multi-root support; lift the cap once resolution is incremental</td></tr>
+      <tr><td>Extension ships unbundled (~7 MB)</td><td>Bundle with esbuild before distribution</td></tr>
+    </table>
+  </div>
+  <div class="foot"><span>Code Context · Architecture</span><span>7</span></div>
+</section>
+
+</body>
+</html>

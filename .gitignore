@@ -1,0 +1,9 @@
+# build output
+out/
+node_modules/
+*.vsix
+
+# restored from fixtures/sample.bundle by `npm install` — see scripts/sample.js
+sample/
+
+.DS_Store
