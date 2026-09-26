@@ -27,7 +27,7 @@
       who need to know what a piece of code means without reading it.</p></div>
     <div class="card"><div class="lbl">What you need</div>
       <p>VS Code or Cursor, a Python project in Git. Optional: an AI model for the plain-language
-      layer — via GitHub Copilot, or an Anthropic or Google API key.</p></div>
+      layer — via GitHub Copilot, or an Anthropic, Google, OpenAI or xAI API key.</p></div>
   </div>
   <div class="foot"><span>Code Context · User manual</span><span>1</span></div>
 </section>
@@ -71,6 +71,10 @@
       <tr><td>Google key</td>
           <td><b>Code Context: Set API key</b> → Google, and pick a <code>gemini-*</code> model.
           It needs an <span class="mono">AIza…</span> key — a project number won't work.</td>
+          <td>API usage</td></tr>
+      <tr><td>OpenAI or xAI key</td>
+          <td><b>Code Context: Set API key</b> → OpenAI or xAI, and pick a <code>gpt-*</code> or <code>grok-*</code> model.
+          Keys from <span class="mono">platform.openai.com</span> or <span class="mono">console.x.ai</span>.</td>
           <td>API usage</td></tr>
     </table>
 
@@ -173,7 +177,7 @@
         <p style="font-size:12.5px">The function's steps as a timeline — read from its body, then put into plain words by the AI.
         Click a step to jump to that line.</p>
         <div class="pv" style="margin-top:10px">
-          <div class="inl" style="margin-top:0"><div class="tg">In plain language</div>
+          <div class="inl" style="margin-top:0">
             <p class="dm" style="margin-bottom:5px">Needs a login token from the user and access to the user database.</p>
             <div class="tl">
               <div class="i"><span class="d rd"></span>Checks the login token is genuine</div>
@@ -274,7 +278,7 @@
       </div>
       <div>
         <div class="sub" style="margin-top:0">With the AI layer — same steps, same order</div>
-        <div class="pv"><div class="inl" style="margin:0"><div class="tg">In plain language</div><div class="tl "><div class="i"><span class="d fl"></span>Sets the window to the last 90 days</div><div class="i"><span class="d fl"></span>Goes through each supplier payment</div><div class="i"><span class="d rd"></span>Reads when the bill was due</div><div class="i"><span class="d rd"></span>Reads when it was actually paid</div><div class="i"><span class="d rd"></span>Turns the payment date into a comparable time</div><div class="i"><span class="d fl"></span>Records how many days late or early it was</div><div class="i"><span class="d rd"></span>Keeps only the payments that were late</div><div class="i"><span class="d rt"></span>Returns the share paid late, e.g. 0.25</div></div></div></div>
+        <div class="pv"><div class="inl" style="margin:0"><div class="tl "><div class="i"><span class="d fl"></span>Sets the window to the last 90 days</div><div class="i"><span class="d fl"></span>Goes through each supplier payment</div><div class="i"><span class="d rd"></span>Reads when the bill was due</div><div class="i"><span class="d rd"></span>Reads when it was actually paid</div><div class="i"><span class="d rd"></span>Turns the payment date into a comparable time</div><div class="i"><span class="d fl"></span>Records how many days late or early it was</div><div class="i"><span class="d rd"></span>Keeps only the payments that were late</div><div class="i"><span class="d rt"></span>Returns the share paid late, e.g. 0.25</div></div></div></div>
         <p style="font-size:11.5px; margin-top:8px">Illustrative — the wording varies between runs; the order never does.</p>
       </div>
     </div>
@@ -345,7 +349,7 @@
         <table class="t">
           <tr><td>Show context panel</td><td>Open the panel for the function at the cursor</td></tr>
           <tr><td>Re-analyse this function</td><td>Same as the ↻ button</td></tr>
-          <tr><td>Set API key</td><td>Anthropic or Google, into secret storage</td></tr>
+          <tr><td>Set API key</td><td>Anthropic, Google, OpenAI or xAI, into secret storage</td></tr>
           <tr><td>List editor models</td><td>What your editor offers extensions</td></tr>
           <tr><td>Clear AI narration cache</td><td>Forget every saved description</td></tr>
           <tr><td>Re-index workspace</td><td>Rebuild the index from scratch</td></tr>
@@ -355,7 +359,7 @@
         <div class="sub" style="margin-top:0">Settings</div>
         <table class="t">
           <tr><td><code>ai.enabled</code></td><td>Plain-language layer. Default off</td></tr>
-          <tr><td><code>ai.model</code></td><td><code>claude-haiku-4-5</code> (default), <code>vscode-lm</code>, <code>gemini-*</code>, <code>claude-sonnet-5</code>, <code>claude-opus-5</code></td></tr>
+          <tr><td><code>ai.model</code></td><td><code>claude-haiku-4-5</code> (default), <code>vscode-lm</code>, <code>gemini-*</code>, <code>gpt-*</code>, <code>grok-*</code></td></tr>
           <tr><td><code>ai.editorModel</code></td><td>Which editor model, e.g. <code>haiku</code></td></tr>
           <tr><td><code>codeLens</code></td><td>Show the lens above functions</td></tr>
           <tr><td><code>maxFiles</code></td><td>Python files indexed (400)</td></tr>

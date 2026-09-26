@@ -320,7 +320,7 @@
     // Same rule as the headline block: if a model wrote the words, the amber
     // rule marks them. The step numbers and order are still computed.
     return plain.length || needs
-      ? `<div class="ai-inline"><span class="aitag">In plain language</span>${body}</div>`
+      ? `<div class="ai-inline">${body}</div>`
       : body;
   }
 

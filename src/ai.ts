@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { ContextResponse, Narration } from './types';
 
 /**
@@ -13,15 +14,27 @@ import { ContextResponse, Narration } from './types';
  * can act on, and cite which evidence each claim came from. It is opt-in,
  * cached by the hash of its evidence, and never blocks the deterministic panel.
  *
- * Two providers are supported so narration quality can be compared at a similar
- * price point. The provider is inferred from the model id, so there is no second
- * setting to drift out of sync with the model.
+ * Several providers are supported so narration quality can be compared at a
+ * similar price point. The provider is inferred from the model id, so there is
+ * no second setting to drift out of sync with the model.
  */
 
 const SECRETS = {
   anthropic: 'codeContext.anthropicApiKey',
-  google: 'codeContext.googleApiKey'
+  google: 'codeContext.googleApiKey',
+  openai: 'codeContext.openaiApiKey',
+  xai: 'codeContext.xaiApiKey'
 } as const;
+
+const PROVIDER_LABEL: Record<Provider, string> = {
+  anthropic: 'Anthropic',
+  google: 'Google',
+  openai: 'OpenAI',
+  xai: 'xAI'
+};
+
+/** xAI serves an OpenAI-compatible API, so the same SDK reaches Grok. */
+const XAI_BASE_URL = 'https://api.x.ai/v1';
 
 type Provider = keyof typeof SECRETS;
 
@@ -30,7 +43,16 @@ const DEFAULT_MODEL = 'claude-haiku-4-5';
 const EFFORT_MODELS = new Set(['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8']);
 
 function providerOf(model: string): Provider {
-  return model.startsWith('gemini') ? 'google' : 'anthropic';
+  if (model.startsWith('gemini')) {
+    return 'google';
+  }
+  if (/^(gpt-|chatgpt|o\d)/.test(model)) {
+    return 'openai';
+  }
+  if (model.startsWith('grok')) {
+    return 'xai';
+  }
+  return 'anthropic';
 }
 
 function configuredModel(): string {
@@ -41,9 +63,10 @@ function configuredModel(): string {
 }
 
 /**
- * One schema, both providers: Anthropic takes it via `jsonSchemaOutputFormat`,
- * Gemini via `responseJsonSchema`. A single definition is what makes the two
- * narrations genuinely comparable.
+ * One schema, every provider: Anthropic takes it via `jsonSchemaOutputFormat`,
+ * Gemini via `responseJsonSchema`, OpenAI and xAI via a strict `json_schema`
+ * format, and editor models in the prompt. A single definition is what makes
+ * the narrations genuinely comparable.
  */
 const SCHEMA = {
   type: 'object',
@@ -237,7 +260,9 @@ export async function setApiKey(context: vscode.ExtensionContext): Promise<void>
   const pick = await vscode.window.showQuickPick(
     [
       { label: 'Anthropic', description: 'for claude-* models', provider: 'anthropic' as Provider },
-      { label: 'Google', description: 'for gemini-* models', provider: 'google' as Provider }
+      { label: 'Google', description: 'for gemini-* models', provider: 'google' as Provider },
+      { label: 'OpenAI', description: 'for gpt-* models', provider: 'openai' as Provider },
+      { label: 'xAI', description: 'for grok-* models', provider: 'xai' as Provider }
     ],
     { title: 'Which API key?', placeHolder: 'Provider' }
   );
@@ -250,7 +275,7 @@ export async function setApiKey(context: vscode.ExtensionContext): Promise<void>
     prompt: 'Stored in the editor secret storage, never in settings or the repository.',
     password: true,
     ignoreFocusOut: true,
-    placeHolder: pick.provider === 'anthropic' ? 'sk-ant-...' : 'AIza...'
+    placeHolder: { anthropic: 'sk-ant-...', google: 'AIza...', openai: 'sk-...', xai: 'xai-...' }[pick.provider]
   });
   if (key === undefined) {
     return;
@@ -272,9 +297,16 @@ async function resolveKey(
   if (stored) {
     return stored;
   }
-  return provider === 'anthropic'
-    ? process.env.ANTHROPIC_API_KEY
-    : process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  switch (provider) {
+    case 'anthropic':
+      return process.env.ANTHROPIC_API_KEY;
+    case 'google':
+      return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    case 'openai':
+      return process.env.OPENAI_API_KEY;
+    case 'xai':
+      return process.env.XAI_API_KEY;
+  }
 }
 
 type Route =
@@ -299,7 +331,7 @@ async function resolveRoute(context: vscode.ExtensionContext): Promise<Route | {
       ? { kind: 'editor', model: editorModelLabel(chat), chat }
       : {
           error:
-            'This editor offers no built-in models to extensions. Pick a claude-* or gemini-* model and set its API key.'
+            'This editor offers no built-in models to extensions. Pick a claude-*, gemini-*, gpt-* or grok-* model and set its API key.'
         };
   }
 
@@ -314,7 +346,7 @@ async function resolveRoute(context: vscode.ExtensionContext): Promise<Route | {
     return { kind: 'editor', model: editorModelLabel(chat), chat };
   }
   return {
-    error: `No ${provider === 'anthropic' ? 'Anthropic' : 'Google'} API key, and this editor offers no built-in models. Run "Code Context: Set API key".`
+    error: `No ${PROVIDER_LABEL[provider]} API key, and this editor offers no built-in models. Run "Code Context: Set API key".`
   };
 }
 
@@ -498,13 +530,67 @@ function parseLooseJson(text: string): unknown {
   return JSON.parse(unfenced.slice(start, end + 1));
 }
 
+/**
+ * OpenAI, through the Responses API — the interface OpenAI's own docs use for
+ * Structured Outputs. Strict mode holds the reply to the schema exactly.
+ */
+async function callOpenAI(apiKey: string, model: string, prompt: string): Promise<Raw> {
+  const client = new OpenAI({ apiKey });
+  const response = await client.responses.create({
+    model,
+    instructions: SYSTEM,
+    input: prompt,
+    text: {
+      format: { type: 'json_schema', name: 'narration', schema: SCHEMA as unknown as Record<string, unknown>, strict: true }
+    }
+  });
+  const text = response.output_text;
+  if (!text) {
+    throw new Error('The model returned an empty response.');
+  }
+  return {
+    parsed: JSON.parse(text),
+    usage: { input: response.usage?.input_tokens ?? 0, output: response.usage?.output_tokens ?? 0 }
+  };
+}
+
+/**
+ * xAI (Grok), through the Chat Completions API — the interface xAI documents
+ * for structured outputs on its OpenAI-compatible endpoint.
+ */
+async function callXai(apiKey: string, model: string, prompt: string): Promise<Raw> {
+  const client = new OpenAI({ apiKey, baseURL: XAI_BASE_URL });
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM },
+      { role: 'user', content: prompt }
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'narration', schema: SCHEMA as unknown as Record<string, unknown>, strict: true }
+    }
+  });
+  const message = response.choices[0]?.message;
+  if (message?.refusal) {
+    throw new Error('The model declined to describe this file.');
+  }
+  if (!message?.content) {
+    throw new Error('The model returned an empty response.');
+  }
+  return {
+    parsed: JSON.parse(message.content),
+    usage: { input: response.usage?.prompt_tokens ?? 0, output: response.usage?.completion_tokens ?? 0 }
+  };
+}
+
 /** Overload and rate-limit responses, which are worth one retry. */
 function isTransient(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /\b(429|503|overloaded|UNAVAILABLE|rate.?limit|high demand)\b/i.test(msg);
 }
 
-/** Both providers are told the same schema; neither is trusted to have obeyed it. */
+/** Every provider is told the same schema; none is trusted to have obeyed it. */
 function isNarrationShape(v: unknown): v is {
   featureName: string;
   headline: string;
@@ -603,7 +689,11 @@ export async function narrate(
         ? callEditorModel(route.chat, prompt)
         : route.kind === 'anthropic'
           ? callAnthropic(route.apiKey, model, prompt)
-          : callGemini(route.apiKey, model, prompt);
+          : route.kind === 'openai'
+            ? callOpenAI(route.apiKey, model, prompt)
+            : route.kind === 'xai'
+              ? callXai(route.apiKey, model, prompt)
+              : callGemini(route.apiKey, model, prompt);
 
     // 503 / 429 are capacity, not a verdict on the request. One retry turns the
     // common case of "model busy" back into an answer instead of an error box.

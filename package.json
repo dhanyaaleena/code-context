@@ -30,7 +30,12 @@
     "git history",
     "fastapi",
     "flask",
-    "ai"
+    "ai",
+    "openai",
+    "gpt",
+    "grok",
+    "claude",
+    "gemini"
   ],
   "main": "./dist/extension.js",
   "private": true,
@@ -93,7 +98,7 @@
         "codeContext.ai.enabled": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Send a small evidence bundle to a language model to describe this code in plain language. **Off by default** — when on, the function's source, its entry points, caller and callee names, and commit messages leave your machine (to Anthropic, Google, or your editor's model provider, depending on `#codeContext.ai.model#`). Results are cached by the hash of that bundle."
+          "markdownDescription": "Send a small evidence bundle to a language model to describe this code in plain language. **Off by default** — when on, the function's source, its entry points, caller and callee names, and commit messages leave your machine (to Anthropic, Google, OpenAI, xAI, or your editor's model provider, depending on `#codeContext.ai.model#`). Results are cached by the hash of that bundle."
         },
         "codeContext.ai.model": {
           "type": "string",
@@ -106,7 +111,12 @@
             "gemini-2.5-flash",
             "gemini-flash-latest",
             "claude-sonnet-5",
-            "claude-opus-5"
+            "claude-opus-5",
+            "gpt-6-luna",
+            "gpt-6-sol",
+            "gpt-6-astra",
+            "grok-4.7",
+            "grok-build-0.1"
           ],
           "enumDescriptions": [
             "Anthropic. Cheap and fast — this is translation over a pre-built bundle, so it is a sensible default.",
@@ -116,9 +126,14 @@
             "Google. Older Flash release.",
             "Google. Always the newest Flash — convenient, but a moving target for comparisons.",
             "Anthropic. Mid-tier — try it if Flash or Haiku phrase things poorly.",
-            "Anthropic. Most capable and most expensive; only if the cheaper models disappoint."
+            "Anthropic. Most capable and most expensive; only if the cheaper models disappoint.",
+            "OpenAI. Its most cost-efficient model — the sensible OpenAI choice for this.",
+            "OpenAI. Mid-tier.",
+            "OpenAI. Most capable and most expensive.",
+            "xAI. Grok's flagship model.",
+            "xAI. The cheapest Grok model in xAI's list."
           ],
-          "markdownDescription": "Model for the plain-language narration. `claude-*` uses your Anthropic key, `gemini-*` your Google key, and `vscode-lm` the models your editor offers extensions (GitHub Copilot in VS Code) with no key. If the chosen provider has no key set, the editor's models are tried before giving up. Requires `#codeContext.ai.enabled#`."
+          "markdownDescription": "Model for the plain-language narration. The prefix picks the provider: `claude-*` uses your Anthropic key, `gemini-*` your Google key, `gpt-*` your OpenAI key, `grok-*` your xAI key, and `vscode-lm` the models your editor offers extensions (GitHub Copilot in VS Code) with no key. If the chosen provider has no key set, the editor's models are tried before giving up. Requires `#codeContext.ai.enabled#`."
         },
         "codeContext.maxFiles": {
           "type": "number",
@@ -144,7 +159,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
-    "@google/genai": "^2.24.0"
+    "@google/genai": "^2.24.0",
+    "openai": "6.49.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

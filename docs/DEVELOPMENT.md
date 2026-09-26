@@ -113,7 +113,11 @@ code does, how it is reached, and what breaks.
   subjects, and co-change filenames. Nothing else. Off by default for exactly
   this reason.
 - **Provider:** inferred from the model id — `claude-*` uses the Anthropic key,
-  `gemini-*` the Google key. No second setting to drift out of sync.
+  `gemini-*` the Google key, `gpt-*` the OpenAI key and `grok-*` the xAI key.
+  No second setting to drift out of sync. OpenAI goes through its Responses API
+  and xAI through its OpenAI-compatible chat endpoint, both with the official
+  `openai` SDK — pinned to 6.49.0, because 7.x requires Node 22 and VS Code 1.90
+  runs extensions on Node 20.
 - **No key? The editor's own models.** `vscode-lm` uses whatever the editor
   offers extensions through `vscode.lm` — GitHub Copilot's models in VS Code,
   Claude included — with a one-time consent prompt and usage billed to the

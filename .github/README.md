@@ -50,21 +50,43 @@ locally from your code and Git, and doesn't depend on a model.
 
 That's it for the computed view. Nothing leaves your machine.
 
-### Optional: the plain-language layer
+### Optional: turn on AI descriptions
 
-Turn it on in settings:
+Everything above works without AI. To add the plain-language descriptions, do three things.
+
+**1. Open your settings file.** Press <kbd>⇧⌘P</kbd> (<kbd>Ctrl+Shift+P</kbd> on Windows/Linux) and run
+**Preferences: Open User Settings (JSON)**.
+
+**2. Paste these two lines** inside the outer `{ }`:
 
 ```json
-"codeContext.ai.enabled": true
+"codeContext.ai.enabled": true,
+"codeContext.ai.model": "claude-haiku-4-5"
 ```
 
-Then give it one way to reach a model:
+`claude-haiku-4-5` is only an example — it's the default, from Anthropic. Use whichever provider you have
+access to:
 
-| Route | Setup | Billed to |
+| If you use | Set `codeContext.ai.model` to | What you need |
 |---|---|---|
-| **GitHub Copilot** (VS Code) | Nothing — used automatically when no key is set. Approve the one-time consent prompt. | Your Copilot plan |
-| **Anthropic** | **Code Context: Set API key** → Anthropic. Default model `claude-haiku-4-5`. | Your API usage |
-| **Google Gemini** | **Code Context: Set API key** → Google, and pick a `gemini-*` model. | Your API usage |
+| **Anthropic** (Claude) | `claude-haiku-4-5` — cheapest, the default · or `claude-sonnet-5`, `claude-opus-5` | An Anthropic API key |
+| **Google** (Gemini) | `gemini-3.6-flash` · or `gemini-3.5-flash`, `gemini-2.5-flash` | A Google AI Studio key (starts with `AIza`) |
+| **OpenAI** (GPT) | `gpt-6-luna` — cheapest · or `gpt-6-sol`, `gpt-6-astra` | An OpenAI API key |
+| **xAI** (Grok) | `grok-4.7` · or `grok-build-0.1` | An xAI API key |
+| **GitHub Copilot** (VS Code only) | `vscode-lm` | No key — approve the consent prompt the first time |
+
+If VS Code underlines something in red, a comma is usually missing on the line above.
+
+**3. Add your API key** (skip this for Copilot). Run **Code Context: Set API key** from the command
+palette, choose the provider, and paste the key.
+
+- Anthropic keys come from **console.anthropic.com** → API keys. Create the key inside a *workspace*,
+  not at organisation level, or requests are rejected.
+- Google keys come from **aistudio.google.com** → Get API key.
+- OpenAI keys come from **platform.openai.com** → API keys.
+- xAI keys come from **console.x.ai** → API keys.
+
+Open the panel on any function and the description appears within a few seconds.
 
 A description typically costs well under a cent on Haiku, and each function is only paid for once
 until its code changes. Keys live in the editor's secret storage, never in settings or the repository.
@@ -86,20 +108,20 @@ Click **Re-analyse** when you're ready.
 |---|---|
 | Show context panel | Open the panel for the function at the cursor |
 | Re-analyse this function | Rebuild and ask the AI again |
-| Set API key | Store an Anthropic or Google key |
+| Set API key | Store an Anthropic, Google, OpenAI or xAI key |
 | List editor models | What your editor offers extensions (e.g. Copilot) |
 | Clear AI narration cache | Forget saved descriptions |
 | Re-index workspace | Rebuild the index from scratch |
 
 ## Settings
 
-| Setting | Default | |
+| Setting | Default | What it does |
 |---|---|---|
-| `codeContext.ai.enabled` | `false` | The plain-language layer |
-| `codeContext.ai.model` | `claude-haiku-4-5` | Also `vscode-lm`, `gemini-3.6-flash`, `claude-sonnet-5`, … |
-| `codeContext.ai.editorModel` | | Which editor model to prefer, e.g. `haiku` |
-| `codeContext.codeLens` | `true` | Show the lens above functions |
-| `codeContext.maxFiles` | `400` | Python files indexed |
+| `codeContext.ai.enabled` | `false` | Turns on AI descriptions. Nothing leaves your machine until this is `true`. |
+| `codeContext.ai.model` | `claude-haiku-4-5` | Which model writes them. The prefix picks the provider: `claude-*` Anthropic, `gemini-*` Google, `gpt-*` OpenAI, `grok-*` xAI, `vscode-lm` your editor's models. |
+| `codeContext.ai.editorModel` | *(empty)* | Only with `vscode-lm`: prefer a model by name, e.g. `haiku` or `gpt-4.1`. |
+| `codeContext.codeLens` | `true` | Show the lens above each function. |
+| `codeContext.maxFiles` | `400` | How many Python files to index. |
 
 ## Good to know
 

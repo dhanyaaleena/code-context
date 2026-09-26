@@ -39,7 +39,7 @@
     <span class="tag on">Working extension</span>
     <span class="tag on">Python</span>
     <span class="tag on">VS Code · Cursor</span>
-    <span class="tag on">Claude · Gemini · Copilot</span>
+    <span class="tag on">Claude · GPT · Gemini · Grok · Copilot</span>
     <span class="tag off">No backend yet</span>
   </div>
   <div class="foot"><span>Code Context · Architecture</span><span>1</span></div>
@@ -140,7 +140,7 @@
         <rect x="120" y="348" width="110" height="36" rx="7" fill="#0a0d10" stroke="#262d36"/><text x="175" y="370" text-anchor="middle" fill="#a9b4c0">Working tree</text>
         <rect x="240" y="348" width="110" height="36" rx="7" fill="#0a0d10" stroke="#262d36"/><text x="295" y="370" text-anchor="middle" fill="#a9b4c0">Disk cache</text>
         <rect x="370" y="348" width="100" height="36" rx="7" fill="#0a0d10" stroke="#262d36"/><text x="420" y="370" text-anchor="middle" fill="#a9b4c0">Git</text>
-        <rect x="490" y="348" width="188" height="36" rx="7" fill="#0a0d10" stroke="#f0b866" stroke-dasharray="4 3"/><text x="584" y="370" text-anchor="middle" fill="#f0b866">Claude · Gemini · vscode.lm</text>
+        <rect x="490" y="348" width="188" height="36" rx="7" fill="#0a0d10" stroke="#f0b866" stroke-dasharray="4 3"/><text x="584" y="370" text-anchor="middle" fill="#f0b866">Claude · GPT · Gemini · Grok</text>
       </g>
       <!-- arrows -->
       <g stroke="#48525d" stroke-width="1.2" fill="none" marker-end="url(#ar)">
@@ -316,17 +316,18 @@
       <div class="card"><h3>Evidence ids must be real</h3><p>Cited ids are filtered to those actually issued, capped at five. Models otherwise cite section headings.</p></div>
       <div class="card"><h3>Steps are placed by number</h3><p>Each line names its step; 0- or 1-based numbering is detected. A miscount costs one line, which falls back to the computed label.</p></div>
       <div class="card"><h3>"Stated" has to be earned</h3><p>With no commits in the bundle, <code>originBasis</code> is forced to <code>inferred</code> whatever the model says.</p></div>
-      <div class="card"><h3>Shape is never trusted</h3><p>All three providers get the same schema; the reply is shape-checked either way before use.</p></div>
+      <div class="card"><h3>Shape is never trusted</h3><p>Every provider gets the same schema, and every reply is shape-checked before use.</p></div>
     </div>
 
     <div class="grid" style="grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; align-items:start">
       <div>
         <div class="sub" style="margin-top:0">Routing</div>
         <table class="t">
-          <tr><td><code>claude-*</code> + key</td><td>Anthropic, schema-constrained output</td></tr>
-          <tr><td><code>gemini-*</code> + key</td><td>Google, JSON-schema response</td></tr>
-          <tr><td><code>vscode-lm</code></td><td>Editor models (Copilot) — schema in prompt, parsed leniently</td></tr>
-          <tr><td>No key set</td><td>Falls back to editor models; the panel names who answered</td></tr>
+          <tr><td><code>claude-*</code></td><td>Anthropic, schema-constrained</td></tr>
+          <tr><td><code>gemini-*</code></td><td>Google, JSON schema</td></tr>
+          <tr><td><code>gpt-*</code> · <code>grok-*</code></td><td>OpenAI · xAI, strict JSON schema</td></tr>
+          <tr><td><code>vscode-lm</code></td><td>Copilot — schema in the prompt</td></tr>
+          <tr><td>No key set</td><td>Falls back to editor models</td></tr>
         </table>
       </div>
       <div>
