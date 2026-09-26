@@ -1,7 +1,7 @@
 <!-- The Marketplace, Open VSX and in-editor page. The repository is private, so nothing here may
      load from GitHub: no images, no links into the repo. GitHub shows .github/README.md instead. -->
 
-<h1 align="center">Code Context</h1>
+<h1 align="center">Code Context Lens</h1>
 <p align="center"><b>Know what you're touching.</b></p>
 
 Put your cursor in a Python function you didn't write. Code Context tells you what it does in
@@ -61,7 +61,7 @@ locally from your code and Git, and doesn't depend on a model.
 
 ## Getting started
 
-1. Install **Code Context** and open a Python project that uses Git.
+1. Install **Code Context Lens** from the Extensions view (search "Code Context Lens") and open a Python project that uses Git.
 2. Click the lens above any function — `3 callers · 5 calls — Show context` — or run
    **Code Context: Show context panel** from the command palette.
 

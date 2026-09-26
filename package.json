@@ -1,6 +1,6 @@
 {
-  "name": "code-context",
-  "displayName": "Code Context",
+  "name": "code-context-lens",
+  "displayName": "Code Context Lens",
   "description": "Know what you're touching. Put the cursor in unfamiliar Python code and see what it does, how it's reached, why it exists and what breaks if you change it.",
   "version": "0.1.0",
   "publisher": "dhanyaaleena",
@@ -138,7 +138,7 @@
     "compile": "npm run typecheck && node esbuild.js",
     "typecheck": "tsc -p . --noEmit",
     "watch": "node esbuild.js --watch",
-    "package": "vsce package --no-dependencies --allow-missing-repository -o code-context.vsix",
+    "package": "vsce package --no-dependencies --allow-missing-repository -o code-context-lens.vsix",
     "sample": "node scripts/sample.js",
     "postinstall": "node scripts/sample.js"
   },
