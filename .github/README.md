@@ -61,11 +61,8 @@ That's it for the computed view. Nothing leaves your machine.
 
 ### Optional: turn on AI descriptions
 
-Everything above works without AI. Until it's set up, the panel shows a **Set up AI** button. To add the
-plain-language descriptions:
-
-**Add your API key.** Press <kbd>⇧⌘P</kbd> (<kbd>Ctrl+Shift+P</kbd> on Windows/Linux) and run
-**Code Context: Set API key** — or click **Set up AI** in the panel. Three quick choices:
+Everything above works without AI. To add the plain-language descriptions, click **Set up AI** at the
+top of the panel — it's there until AI is set up. Three quick choices follow:
 
 1. **Provider** — Anthropic, Google, OpenAI or xAI.
 2. **Model** — the cheapest is listed first and marked *Recommended*; it's plenty for plain-language
@@ -73,7 +70,10 @@ plain-language descriptions:
 3. **Key** — paste it. If one is already saved, leave the box empty to keep it.
 
 That's all — it turns AI descriptions on and saves your choice to `codeContext.ai.enabled` and
-`codeContext.ai.model`. Run it again any time to switch model or provider.
+`codeContext.ai.model`.
+
+Prefer the keyboard? The same steps run from <kbd>⇧⌘P</kbd> (<kbd>Ctrl+Shift+P</kbd> on Windows/Linux) →
+**Code Context: Set API key** — which is also how to switch model or provider later.
 
 | Provider | Recommended (cheapest) | Also offered | Where keys come from |
 |---|---|---|---|
