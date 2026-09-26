@@ -173,7 +173,7 @@ src/hover.ts        tier 2
 src/codelens.ts     tier 1
 src/panel.ts        tier 3 shell + CSP
 src/extension.ts    wiring: focus, staleness, commands
-media/panel.js      the panel: glance, sections, map, stale bar
+media/panel.js      the panel: summary, journey strip, stats, timeline sections, map, stale bar
 media/panel.css     themed from --vscode-* tokens so it follows the colour theme
 fixtures/           sample.bundle — the demo repo's history
 scripts/sample.js   restores sample/ from the bundle

@@ -6,14 +6,6 @@
   "publisher": "dhanyaaleena",
   "license": "MIT",
   "icon": "images/icon.png",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/dhanyaaleena/code-context.git"
-  },
-  "bugs": {
-    "url": "https://github.com/dhanyaaleena/code-context/issues"
-  },
-  "homepage": "https://github.com/dhanyaaleena/code-context#readme",
   "galleryBanner": {
     "color": "#0d1014",
     "theme": "dark"
@@ -98,7 +90,7 @@
         "codeContext.ai.enabled": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Send a small evidence bundle to a language model to describe this code in plain language. **Off by default** — when on, the function's source, its entry points, caller and callee names, and commit messages leave your machine (to Anthropic, Google, or your editor's model provider, depending on `#codeContext.ai.model#`). Results are cached by the hash of that bundle."
+          "markdownDescription": "Send a small evidence bundle to a language model to describe this code in plain language. **Off by default** \u2014 when on, the function's source, its entry points, caller and callee names, and commit messages leave your machine (to Anthropic, Google, or your editor's model provider, depending on `#codeContext.ai.model#`). Results are cached by the hash of that bundle."
         },
         "codeContext.ai.model": {
           "type": "string",
@@ -114,13 +106,13 @@
             "claude-opus-5"
           ],
           "enumDescriptions": [
-            "Anthropic. Cheap and fast — this is translation over a pre-built bundle, so it is a sensible default.",
-            "The editor's own models via vscode.lm — GitHub Copilot in VS Code. No API key; uses your editor subscription.",
+            "Anthropic. Cheap and fast \u2014 this is translation over a pre-built bundle, so it is a sensible default.",
+            "The editor's own models via vscode.lm \u2014 GitHub Copilot in VS Code. No API key; uses your editor subscription.",
             "Google. Pinned Flash release; comparisons against it stay valid over time.",
             "Google. Previous Flash release, for A/B against 3.6.",
             "Google. Older Flash release.",
-            "Google. Always the newest Flash — convenient, but a moving target for comparisons.",
-            "Anthropic. Mid-tier — try it if Flash or Haiku phrase things poorly.",
+            "Google. Always the newest Flash \u2014 convenient, but a moving target for comparisons.",
+            "Anthropic. Mid-tier \u2014 try it if Flash or Haiku phrase things poorly.",
             "Anthropic. Most capable and most expensive; only if the cheaper models disappoint."
           ],
           "markdownDescription": "Model for the plain-language narration. `claude-*` uses your Anthropic key, `gemini-*` your Google key, and `vscode-lm` the models your editor offers extensions (GitHub Copilot in VS Code) with no key. If the chosen provider has no key set, the editor's models are tried before giving up. Requires `#codeContext.ai.enabled#`."
@@ -133,7 +125,7 @@
         "codeContext.ai.editorModel": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Which editor model to use for `vscode-lm` (or the no-key fallback), matched against its family, id or name — e.g. `haiku`, `gpt-4.1`, `sonnet`. Empty picks the cheapest capable one. Run **Code Context: List editor models** to see what is available."
+          "markdownDescription": "Which editor model to use for `vscode-lm` (or the no-key fallback), matched against its family, id or name \u2014 e.g. `haiku`, `gpt-4.1`, `sonnet`. Empty picks the cheapest capable one. Run **Code Context: List editor models** to see what is available."
         }
       }
     }
@@ -143,7 +135,7 @@
     "compile": "npm run typecheck && node esbuild.js",
     "typecheck": "tsc -p . --noEmit",
     "watch": "node esbuild.js --watch",
-    "package": "vsce package --no-dependencies -o code-context.vsix",
+    "package": "vsce package --no-dependencies --allow-missing-repository -o code-context.vsix",
     "sample": "node scripts/sample.js",
     "postinstall": "node scripts/sample.js"
   },

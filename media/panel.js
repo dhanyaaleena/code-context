@@ -12,7 +12,8 @@
   const vscode = acquireVsCodeApi();
   const root = document.getElementById('root');
 
-  const MAX_NODES = 3;
+  /** Boxes per row before the rest collapse into "+N more". Two fit a sidebar legibly. */
+  const MAX_NODES = 2;
   let narration = null;
   let lastCtx = null;
   let open = { steps: false, history: false, touches: false, evidence: false };
@@ -74,7 +75,7 @@
 
   function render(ctx) {
     persist();
-    root.innerHTML = [headline(ctx), badges(ctx), wayIn(ctx), sections(ctx)].join('');
+    root.innerHTML = [headline(ctx), journey(ctx), stats(ctx), sections(ctx)].join('');
     wire(ctx);
   }
 
@@ -91,7 +92,7 @@
       return '';
     }
     return `<div class="ai-inline pending">
-      <span class="aitag">AI · analysing</span>
+      <span class="aitag">AI is analysing</span>
       <p class="why" style="margin:0">${esc(what)}</p>
     </div>`;
   }
@@ -100,24 +101,19 @@
 
   function headline(ctx) {
     const n = narration && narration.state === 'ready' ? narration : null;
-    const edited = ctx.dirty
-      ? `<span class="fresh dirty">EDITED SINCE ${esc(ctx.indexedAt)}</span>`
-      : '';
+    const edited = ctx.dirty ? `<span class="edited" title="Unsaved edits since ${esc(ctx.indexedAt)}">unsaved edits</span>` : '';
 
     // Computed identity sits outside the amber rule; everything inside it was
     // written by the model. Keeping that boundary visible is the trust mechanism,
     // so it survives even when there is no narration to put in it.
     const busy = spinning || (narration && narration.state === 'loading');
     const ident = `<div class="ident">
-      <span class="sym">${esc(ctx.symbol.qualified)}()</span>
-      <span class="loc">${esc(shortFile(ctx.symbol.file))}:${ctx.symbol.startLine + 1}</span>
-      ${edited}
-      <button class="reanalyse${busy ? ' busy' : ''}${stale && !busy ? ' stale' : ''}" id="reanalyse"
-              title="Re-analyse" aria-label="Re-analyse this function"${busy ? ' disabled' : ''}>
-        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-          <path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/>
-        </svg>
-      </button>
+      <div class="names">
+        <div class="sym">${esc(ctx.symbol.qualified)}()</div>
+        <div class="loc">${esc(ctx.symbol.file)} · line ${ctx.symbol.startLine + 1}${edited}</div>
+      </div>
+      <button class="iconbtn reanalyse${busy ? ' busy' : ''}${stale && !busy ? ' stale' : ''}" id="reanalyse"
+              title="Re-analyse" aria-label="Re-analyse this function"${busy ? ' disabled' : ''}>${ICON.refresh}</button>
     </div>`;
 
     // Changed code is announced, never re-analysed behind the reader's back.
@@ -143,53 +139,83 @@
 
     return `${ident}${staleBar}
     <div class="ai">
-      <div class="airow">
-        <span class="feat">${esc(n.featureName)}</span>
-        <span class="src">${esc(shortModel(n.model))}${n.cached ? ' · cached' : ''}</span>
+      <div class="top">
+        ${n.featureName ? `<span class="feat">${esc(n.featureName)}</span>` : ''}
+        <span class="model">${esc(shortModel(n.model))}${n.cached ? ' · cached' : ''}</span>
       </div>
       <p class="lead">${esc(n.headline)}</p>
-      ${n.risk ? `<p class="line"><span class="k">If it breaks</span>${esc(n.risk)}</p>` : ''}
     </div>`;
   }
 
-  /** Nothing renders when there is nothing to warn about. */
-  function badges(ctx) {
-    const out = [];
-    // "untested" and the guessed-edge count both moved out of the badge row:
-    // the first is already in Detail, the second is already drawn as the dashed
-    // edges in the map, and repeating them here cost a line at the top of a
-    // panel whose whole point is the ten-second read.
+  /**
+   * The journey strip: from the outside world to this function.
+   *
+   * A route, then the handler it lands in, then this function. It shows the
+   * first way in; the rest are one click away. Functions nobody reaches from a
+   * route, job or command simply don't get a strip.
+   */
+  function journey(ctx) {
+    const entries = ctx.isEntryPoint ? [ctx.isEntryPoint] : ctx.reachedFrom || [];
+    if (!entries.length) {
+      return '';
+    }
+    const [first, ...rest] = entries;
+    const handler = first.symbol;
+    const direct = ctx.isEntryPoint || handler.qualified === ctx.symbol.qualified;
+    const rows = [
+      entryRow(first),
+      direct
+        ? ''
+        : `<div class="jrow hit" data-file="${esc(handler.file)}" data-line="${handler.line}" title="${esc(handler.file)}">
+             <span class="jfn">${esc(handler.name)}()</span><span class="jnote">handler</span>
+           </div>`,
+      `<div class="jrow here"><span class="jfn">${esc(ctx.symbol.name)}()</span><span class="jnote">this function</span></div>`
+    ].join('');
+    const more = rest.length
+      ? `<details class="jmore"><summary>+${rest.length} more way${rest.length === 1 ? '' : 's'} in</summary>${rest
+          .map(entryRow)
+          .join('')}</details>`
+      : '';
+    return `<div class="journey">${rows}${more}</div>`;
+  }
+
+  function entryRow(e) {
+    const http = e.kind === 'http' ? /^([A-Z]+(?:\/[A-Z]+)*)\s+(.+)$/.exec(e.label) : null;
+    const badge = http
+      ? `<span class="method m-${METHOD_CLASS[http[1].split('/')[0]] || 'other'}">${esc(http[1])}</span>`
+      : `<span class="method m-other">${esc(KIND_BADGE[e.kind] || e.kind)}</span>`;
+    const text = http ? http[2] : e.label.replace(/^(background job|scheduled|command):\s*/, '');
+    return `<div class="jrow hit" data-file="${esc(e.symbol.file)}" data-line="${e.symbol.line}"
+                 title="${esc(e.label)}${e.detail ? ' · ' + esc(e.detail) : ''}">
+      ${badge}<span class="jpath">${esc(text)}</span>
+    </div>`;
+  }
+
+  /** The numbers worth knowing, in one quiet line. Nothing is repeated below. */
+  function stats(ctx) {
+    const bits = [];
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    if (ctx.callers.length) {
+      bits.push(plural(ctx.callers.length, 'caller'));
+    }
+    const calls = ownCalls(ctx).length;
+    if (calls) {
+      bits.push(plural(calls, 'call'));
+    }
+    bits.push(
+      ctx.tests.count
+        ? plural(ctx.tests.count, 'test file')
+        : '<span class="bad">no tests</span>'
+    );
+    const changes = ctx.history.length + (ctx.historyOlder || 0);
+    if (changes) {
+      bits.push(plural(changes, 'change'));
+    }
     const ai = ctx.history.filter((h) => h.aiAssisted).length;
     if (ai) {
-      out.push(['warn', `${ai} AI-assisted change${ai === 1 ? '' : 's'}`]);
+      bits.push(`<span class="bad">${ai} AI-assisted</span>`);
     }
-    const ways = (ctx.reachedFrom || []).length;
-    if (ways > 3) {
-      out.push(['', `${ways} ways in`]);
-    }
-    if (ctx.impact.direct > 8) {
-      out.push(['', `${ctx.impact.direct} callers`]);
-    }
-    if (!out.length) {
-      return '';
-    }
-    return `<div class="badges">${out
-      .map(([cls, t]) => `<span class="badge ${cls}">${esc(t)}</span>`)
-      .join('')}</div>`;
-  }
-
-  function wayIn(ctx) {
-    const all = ctx.isEntryPoint ? [ctx.isEntryPoint] : ctx.reachedFrom || [];
-    if (!all.length) {
-      return '';
-    }
-    const first = all[0];
-    const more = all.length - 1;
-    return `<div class="wayin hit" data-file="${esc(first.symbol.file)}" data-line="${first.symbol.line}">
-      <span class="k">${esc(KIND_WORD[first.kind] || first.kind)}</span>
-      <span class="v">${esc(first.label)}</span>
-      ${more ? `<span class="more-n">+${more}</span>` : ''}
-    </div>`;
+    return `<div class="stats">${bits.map((b) => `<span>${b}</span>`).join('')}</div>`;
   }
 
   /* ---------------------------------------------------------- the disclosures */
@@ -199,7 +225,7 @@
       section('steps', 'What it does', stepsSummary(ctx), stepsBody(ctx)),
       section('history', 'How it got here', historySummary(ctx), historyBody(ctx)),
       section('touches', 'What it touches', touchesSummary(ctx), touchesBody(ctx)),
-      section('evidence', 'Detail', 'the longer version', detailBody(ctx))
+      section('evidence', 'Detail', detailSummary(ctx), detailBody(ctx))
     ]
       .filter(Boolean)
       .join('');
@@ -210,7 +236,7 @@
       return '';
     }
     return `<details class="sec" data-sec="${id}"${open[id] ? ' open' : ''}>
-      <summary><span class="t">${esc(title)}</span><span class="s">${esc(summary)}</span></summary>
+      <summary>${ICON.chevron}<span class="t">${esc(title)}</span><span class="s">${esc(summary)}</span></summary>
       <div class="secbody">${body}</div>
     </details>`;
   }
@@ -240,7 +266,7 @@
       .filter((v, i, a) => v && a.indexOf(v) === i)
       .slice(0, 3)
       .join(', ');
-    return `${w.steps.length} steps — ${shape}`;
+    return `${w.steps.length} step${w.steps.length === 1 ? '' : 's'} · ${shape}`;
   }
 
   function stepsBody(ctx) {
@@ -258,28 +284,35 @@
       ? `<p class="needs">${esc(needs)}</p>`
       : [
           w.requires.length
-            ? `<div class="wmeta"><span class="k">NEEDS</span>${w.requires
-                .map((r) => `<span class="chip dim">${esc(r)}</span>`)
+            ? `<div class="facts"><span class="lbl">Needs</span>${w.requires
+                .map((r) => `<span class="chip">${esc(r)}</span>`)
                 .join('')}</div>`
             : '',
           w.inputs.length
-            ? `<div class="wmeta"><span class="k">TAKES</span>${w.inputs
-                .map((i) => `<span class="chip dim">${esc(i.name)}</span>`)
+            ? `<div class="facts"><span class="lbl">Takes</span>${w.inputs
+                .map((i) => `<span class="chip">${esc(i.name)}</span>`)
                 .join('')}</div>`
             : ''
         ].join('');
 
     const steps = w.steps
       .map(
-        (st, i) => `<li class="wstep hit" data-file="${esc(ctx.symbol.file)}" data-line="${st.line}">
-          <span class="wnum" style="color:${STEP_COLOUR[st.kind] || 'var(--cc-dim)'};
-                border-color:${STEP_COLOUR[st.kind] || 'var(--cc-line)'}">${i + 1}</span>
-          <span class="wlabel">${esc(plain[i] || st.label)}</span>
+        (st, i) => `<li class="hit" data-file="${esc(ctx.symbol.file)}" data-line="${st.line}"
+                        title="Step ${i + 1} · line ${st.line + 1}">
+          <span class="dot ${KIND_CLASS[st.kind] || 'k-flow'}"></span>
+          <span class="txt">${esc(plain[i] || st.label)}</span>
         </li>`
       )
       .join('');
+    // Only the colours actually used get a key, so a function that never
+    // writes doesn't carry a "changes data" entry nobody needs to learn.
+    const used = new Set(w.steps.map((st) => KIND_CLASS[st.kind]).filter(Boolean));
+    const key = KEY.filter(([cls]) => used.has(cls));
+    const keyHtml = key.length
+      ? `<div class="key">${key.map(([cls, word]) => `<span class="${cls}">${esc(word)}</span>`).join('')}</div>`
+      : '';
 
-    const body = `${meta}${steps ? `<ol class="wsteps">${steps}</ol>` : ''}`;
+    const body = `${meta}${steps ? `<ol class="tl">${steps}</ol>` : ''}${keyHtml}`;
     const pending = aiPending('unpacking the steps…');
     if (pending) {
       return `${pending}${body}`;
@@ -287,7 +320,7 @@
     // Same rule as the headline block: if a model wrote the words, the amber
     // rule marks them. The step numbers and order are still computed.
     return plain.length || needs
-      ? `<div class="ai-inline"><span class="aitag">AI · plain language</span>${body}</div>`
+      ? `<div class="ai-inline"><span class="aitag">In plain language</span>${body}</div>`
       : body;
   }
 
@@ -299,7 +332,7 @@
     }
     const n = ctx.history.length + (ctx.historyOlder || 0);
     const last = ctx.history[ctx.history.length - 1];
-    return `${n} change${n === 1 ? '' : 's'}, latest ${last.date.slice(0, 10)}`;
+    return `latest ${monthYear(last.date)}`;
   }
 
   function historyBody(ctx) {
@@ -311,23 +344,28 @@
       .slice()
       .reverse()
       .map(
-        (h) => `<li class="hrow hit" data-sha="${esc(h.sha)}">
-          <span class="hdate">${esc(h.date.slice(0, 10))}</span>
-          <span class="hsub${h.aiAssisted ? ' ai' : ''}">${esc(h.subject)}${
-            h.origin ? '<span class="origin">added here</span>' : ''
-          }</span>
+        (h, i) => `<li class="hrow hit${i === 0 ? ' first' : ''}" data-sha="${esc(h.sha)}" title="Show commit ${esc(h.sha)}">
+          <span class="dot"></span>
+          <span class="hbody">
+            <span class="hsub">${esc(h.subject)}${
+              h.origin ? '<span class="origin">added here</span>' : ''
+            }</span>
+            <div class="hmeta">${esc(dayMonthYear(h.date))} · ${esc(h.author)}${
+              h.aiAssisted ? ' · <span class="bad">AI-assisted</span>' : ''
+            }</div>
+          </span>
         </li>`
       )
       .join('');
     const co = ctx.feature.coChange.length
-      ? `<div class="wmeta" style="margin-top:9px"><span class="k">CHANGES WITH</span>${ctx.feature.coChange
-          .map((c) => `<span class="chip dim">${esc(shortFile(c.file))} ×${c.commits}</span>`)
+      ? `<div class="cochange"><span class="lbl">Often changes with</span>${ctx.feature.coChange
+          .map((c) => `<span class="chip" title="${esc(c.file)}">${esc(shortFile(c.file))} ×${c.commits}</span>`)
           .join('')}</div>`
       : '';
     const older = ctx.historyOlder
       ? `<p class="olderline">+${ctx.historyOlder} older change${ctx.historyOlder === 1 ? '' : 's'}</p>`
       : '';
-    return `${why}<ul class="hlist">${rows}${older ? '' : ''}</ul>${older}${co}`;
+    return `${why}<ul class="hlist">${rows}</ul>${older}${co}`;
   }
 
   /**
@@ -347,9 +385,11 @@
     if (!origin && !since) {
       return '';
     }
-    const tag =
-      narration.originBasis === 'inferred' ? 'AI · why it exists · inferred' : 'AI · why it exists';
-    return `<div class="ai-inline"><span class="aitag">${esc(tag)}</span>
+    // No heading: the amber rule already says a model wrote this, and the
+    // section title already says what it is about. The one thing kept is the
+    // "inferred" mark, because without it a guess reads exactly like a fact.
+    const tag = narration.originBasis === 'inferred' ? '<span class="aitag">inferred</span>' : '';
+    return `<div class="ai-inline">${tag}
       ${origin ? `<p class="why" style="margin:0">${esc(origin)}</p>` : ''}
       ${since ? `<p class="why since">${esc(since)}</p>` : ''}
     </div>`;
@@ -361,20 +401,11 @@
     return ctx.callees.filter((c) => c.confidence !== 'external' && c.confidence !== 'unresolved');
   }
 
+  /** The counts are already in the stats line; this says what opening it shows. */
   function touchesSummary(ctx) {
-    const calls = ownCalls(ctx).length;
-    const callers = ctx.callers.length;
-    const bits = [];
-    if (callers) {
-      bits.push(`${callers} caller${callers === 1 ? '' : 's'}`);
-    }
-    if (calls) {
-      bits.push(`${calls} call${calls === 1 ? '' : 's'}`);
-    }
-    if (ctx.impact.transitive) {
-      bits.push(`${ctx.impact.transitive} further out`);
-    }
-    return bits.join(' · ') || 'nothing in this workspace';
+    return ctx.impact.transitive
+      ? `map · ${ctx.impact.transitive} further out`
+      : 'map of callers and calls';
   }
 
   function touchesBody(ctx) {
@@ -385,14 +416,17 @@
     const upstreamCovered =
       ctx.callers.length > 0 && (ctx.reachedFrom || []).length >= ctx.callers.length;
     const callers = upstreamCovered ? [] : ctx.callers;
+    if (!callers.length && !calls.length) {
+      return `<p class="nomap">Everything that calls this is a way in, shown at the top. It calls nothing else in this workspace.</p>`;
+    }
 
     const list = (title, items) =>
       items.length > MAX_NODES
-        ? `<details class="more"><summary>${esc(title)} — all ${items.length}</summary><ul>${items
+        ? `<details class="more"><summary>${esc(title)} (${items.length})</summary><ul>${items
             .map(
               (c) => `<li class="hit" data-file="${esc(c.file)}" data-line="${c.line}">
                 <b>${esc(c.qualified)}</b>
-                <span class="why">${esc(shortFile(c.file))}${
+                <span class="where">${esc(shortFile(c.file))}${
                   c.confidence !== 'resolved' ? ` · ${esc(c.confidence)}` : ''
                 }</span></li>`
             )
@@ -400,9 +434,9 @@
         : '';
 
     return `${mapSvg(ctx, callers, calls)}
-      <div class="legend"><span><i></i>resolved</span><span><i class="d"></i>a guess</span>
-        <span class="hint">click a box to jump there</span></div>
-      ${list('Called by', callers)}${list('Calls', calls)}`;
+      <div class="legend"><span><i></i>confirmed</span><span><i class="d"></i>a guess</span>
+        <span class="hint">click a box to go there</span></div>
+      ${list('See all callers', callers)}${list('See everything it calls', calls)}`;
   }
 
   /**
@@ -411,9 +445,9 @@
    * it only appear when there are too many boxes to draw.
    */
   function mapSvg(ctx, callers, calls) {
-    const W = 512;
-    const BOX_H = 34;
-    const GAP = 12;
+    const W = 352;
+    const BOX_H = 38;
+    const GAP = 8;
 
     const up = callers.slice(0, MAX_NODES);
     const upHidden = callers.length - up.length;
@@ -423,10 +457,10 @@
     const hasUp = up.length || upHidden;
     const hasDown = down.length || downHidden;
 
-    const yUp = 18;
-    const yFocus = hasUp ? 104 : 22;
-    const yDown = yFocus + 88;
-    const H = hasDown ? yDown + BOX_H + 8 : yFocus + 56;
+    const yUp = 4;
+    const yFocus = hasUp ? 78 : 4;
+    const yDown = yFocus + 82;
+    const H = hasDown ? yDown + BOX_H + 4 : yFocus + 48;
 
     const row = (nodes, hidden, y) => {
       const count = nodes.length + (hidden > 0 ? 1 : 0);
@@ -446,16 +480,16 @@
             ? ` class="hit" data-file="${esc(n.file)}" data-line="${n.line}"`
             : ' class="dim"';
           const label = n ? n.name : b.label;
-          const sub = n ? shortFile(n.file) : 'in the list below';
+          const sub = n ? String(n.file).split('/').pop() : 'listed below';
           return `<g${nav}>
             <rect x="${b.x}" y="${y}" width="${b.w}" height="${BOX_H}" rx="6"
               fill="var(--cc-card)" stroke="${dashed ? 'var(--cc-red)' : 'var(--cc-line)'}"
               ${dashed ? 'stroke-dasharray="3 3"' : ''}/>
-            <text x="${b.x + 9}" y="${y + 15}" font-size="10.5" fill="var(--cc-link)">${esc(
-              clip(label, Math.floor(b.w / 6))
+            <text x="${b.x + 9}" y="${y + 16}" font-size="11" fill="var(--cc-link)">${esc(
+              clip(label, Math.floor((b.w - 14) / 6.7))
             )}</text>
-            <text x="${b.x + 9}" y="${y + 27}" font-size="8.5" fill="var(--cc-dim)">${esc(
-              clip(sub, Math.floor(b.w / 5))
+            <text x="${b.x + 9}" y="${y + 30}" font-size="9.5" fill="var(--cc-dim)">${esc(
+              clip(sub, Math.floor((b.w - 14) / 5.8))
             )}</text>
           </g>`;
         })
@@ -465,7 +499,7 @@
 
     const upRow = row(up, upHidden, yUp);
     const downRow = row(down, downHidden, yDown);
-    const focusX = 86;
+    const focusX = 48;
     const focusW = W - focusX * 2;
 
     const anchors = (n) => {
@@ -495,12 +529,12 @@
         )
         .join('')}
       ${upRow.svg}
-      <rect x="${focusX}" y="${yFocus}" width="${focusW}" height="42" rx="7"
+      <rect x="${focusX}" y="${yFocus}" width="${focusW}" height="40" rx="7"
         fill="var(--cc-card)" stroke="var(--cc-acc)" stroke-width="1.5"/>
-      <text x="${W / 2}" y="${yFocus + 19}" text-anchor="middle" font-size="12"
-        fill="var(--vscode-foreground)">${esc(clip(ctx.symbol.qualified + '()', 40))}</text>
-      <text x="${W / 2}" y="${yFocus + 32}" text-anchor="middle" font-size="8"
-        letter-spacing="1.1" fill="var(--cc-acc)">YOU ARE HERE</text>
+      <text x="${W / 2}" y="${yFocus + 18}" text-anchor="middle" font-size="12"
+        fill="var(--vscode-foreground)">${esc(clip(ctx.symbol.name + '()', Math.floor(focusW / 7.3)))}</text>
+      <text x="${W / 2}" y="${yFocus + 31}" text-anchor="middle" font-size="10"
+        fill="var(--cc-acc)" style="font-family: var(--vscode-font-family)">this function</text>
       ${downRow.boxes
         .map((b, i) =>
           edge(downA[i], yFocus + 42, b.x + b.w / 2, yDown, b.node && b.node.confidence !== 'resolved')
@@ -517,9 +551,18 @@
 
   /* -- detail -- */
 
+  function detailSummary(ctx) {
+    const n = narration && narration.state === 'ready' ? narration : null;
+    const cautions = n ? (n.watchOut || []).length : 0;
+    return cautions ? `${cautions} caution${cautions === 1 ? '' : 's'}` : 'tests and evidence';
+  }
+
   function detailBody(ctx) {
     const n = narration && narration.state === 'ready' ? narration : null;
     const rows = [];
+    if (n && n.risk) {
+      rows.push(['If it breaks', n.risk]);
+    }
     if (n && n.flow) {
       rows.push(['How it is reached', n.flow]);
     }
@@ -528,13 +571,13 @@
     }
     const watch =
       n && (n.watchOut || []).length
-        ? `<div class="watch"><div class="wt">WATCH OUT</div><ul>${n.watchOut
-            .map((w) => `<li>${esc(w)}</li>`)
+        ? `<div class="watch"><div class="lbl">Watch out</div><ul>${n.watchOut
+            .map((w) => `<li>${ICON.alert}<span>${esc(w)}</span></li>`)
             .join('')}</ul></div>`
         : '';
     const ev =
       n && (n.evidence || []).length
-        ? `<div class="wmeta" style="margin-top:10px"><span class="k">EVIDENCE</span>${n.evidence
+        ? `<div class="evidence"><span class="lbl">Evidence used</span>${n.evidence
             .map((e) => `<span class="chip">${esc(e)}</span>`)
             .join('')}</div>`
         : '';
@@ -546,35 +589,52 @@
       ? `${ctx.tests.count} test file${ctx.tests.count === 1 ? '' : 's'} reference this`
       : 'No test file references this';
 
-    return `${err}${rows
+    return `${watch}${err}${rows
       .map((r) => `<p class="line"><span class="k">${esc(r[0])}</span>${esc(r[1])}</p>`)
-      .join('')}${watch}<p class="line"><span class="k">Tests</span>${esc(tests)}</p>
-      <p class="line"><span class="k">Indexed</span>${esc(ctx.indexedAt)}${ctx.dirty ? ' · buffer is ahead' : ''}</p>${ev}`;
+      .join('')}<p class="line"><span class="k">Tests</span>${esc(tests)}</p>
+      <p class="line"><span class="k">As of commit</span><span><span class="mono">${esc(ctx.indexedAt)}</span>${ctx.dirty ? ' · plus unsaved edits' : ''}</span></p>${ev}`;
   }
 
   /* ------------------------------------------------------------- plumbing */
 
-  const KIND_WORD = {
-    http: 'web request',
-    task: 'background job',
-    schedule: 'scheduled job',
-    cli: 'command line',
-    event: 'app event',
-    signal: 'app signal'
+  /* Step kinds collapse to four colours a reader can learn at a glance. */
+  const KIND_CLASS = {
+    read: 'k-read',
+    filter: 'k-read',
+    call: 'k-read',
+    write: 'k-write',
+    error: 'k-error',
+    return: 'k-return',
+    compute: 'k-flow',
+    loop: 'k-flow',
+    branch: 'k-flow',
+    guard: 'k-flow'
+  };
+  const KEY = [
+    ['k-read', 'reads or calls'],
+    ['k-write', 'changes data'],
+    ['k-error', 'can fail'],
+    ['k-return', 'returns']
+  ];
+
+  const KIND_BADGE = { task: 'JOB', schedule: 'CRON', cli: 'CLI', event: 'EVENT', signal: 'SIGNAL' };
+  const METHOD_CLASS = { GET: 'get', POST: 'post', PUT: 'put', PATCH: 'patch', DELETE: 'delete' };
+
+  const ICON = {
+    refresh: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg>`,
+    chevron: `<svg class="chev" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg>`,
+    alert: `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M8 2.2 14.4 13.5H1.6z"/><path stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 6.6v3.3M8 11.7v.1"/></svg>`
   };
 
-  const STEP_COLOUR = {
-    read: 'var(--cc-link)',
-    filter: 'var(--cc-link)',
-    compute: 'var(--vscode-foreground)',
-    loop: 'var(--vscode-foreground)',
-    call: 'var(--cc-link)',
-    branch: 'var(--cc-warn)',
-    write: 'var(--cc-warn)',
-    error: 'var(--cc-red)',
-    return: 'var(--cc-acc)',
-    guard: 'var(--cc-dim)'
-  };
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function monthYear(iso) {
+    const [y, m] = String(iso).slice(0, 10).split('-');
+    return MONTHS[Number(m) - 1] ? `${MONTHS[Number(m) - 1]} ${y}` : String(iso).slice(0, 10);
+  }
+  function dayMonthYear(iso) {
+    const [y, m, d] = String(iso).slice(0, 10).split('-');
+    return MONTHS[Number(m) - 1] ? `${Number(d)} ${MONTHS[Number(m) - 1]} ${y}` : String(iso).slice(0, 10);
+  }
 
   function wire() {
     root.querySelectorAll('[data-file]').forEach((el) =>
@@ -621,15 +681,24 @@
     );
   }
 
+  /**
+   * "claude-haiku-4-5" → "Haiku 4.5"; "gemini-3.6-flash" → "Gemini 3.6 Flash";
+   * "copilot/gpt-4o" → "GPT-4o via Copilot". Editor models name their vendor,
+   * so the fallback from a missing key to Copilot is visible rather than silent.
+   */
   function shortModel(id) {
     if (!id) {
       return 'AI';
     }
-    // Editor models arrive as vendor/family — say who is answering, so the
-    // fallback from a missing key to Copilot is visible rather than silent.
     const [vendor, family] = String(id).includes('/') ? String(id).split('/') : ['', String(id)];
-    const short = family.replace(/^claude-/, '').replace(/-latest$/, '').replace(/-/g, ' ');
-    return vendor ? `${short} via ${vendor}` : short;
+    const words = family
+      .replace(/^claude-/, '')
+      .replace(/-latest$/, '')
+      .replace(/(\d)-(\d)/g, '$1.$2')
+      .split('-')
+      .map((w) => (/^gpt$/i.test(w) ? 'GPT' : w.charAt(0).toUpperCase() + w.slice(1)));
+    const name = words.join(' ').replace(/^GPT (\S)/, 'GPT-$1');
+    return vendor ? `${name} via ${vendor.charAt(0).toUpperCase() + vendor.slice(1)}` : name;
   }
 
   function shortFile(p) {
