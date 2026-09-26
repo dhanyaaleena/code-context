@@ -1,5 +1,8 @@
 <h1 align="center">Code Context Lens</h1>
 <p align="center"><b>Know what you're touching.</b></p>
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=dhanyaaleena.code-context-lens"><img src="https://vsmarketplacebadges.dev/version-short/dhanyaaleena.code-context-lens.svg" alt="VS Marketplace version"></a>
+</p>
 
 Put your cursor in a Python function you didn't write. Code Context tells you what it does in
 plain language, how people and systems reach it, why it was built, and what it's connected to —
