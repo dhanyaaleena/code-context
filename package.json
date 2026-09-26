@@ -2,7 +2,7 @@
   "name": "code-context-lens",
   "displayName": "Code Context Lens",
   "description": "Know what you're touching. Put the cursor in unfamiliar Python code and see what it does, how it's reached, why it exists and what breaks if you change it.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "dhanyaaleena",
   "author": {
     "name": "Dhanya Koottunkal"
