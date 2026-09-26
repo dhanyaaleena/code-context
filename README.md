@@ -1,3 +1,6 @@
+<!-- The Marketplace, Open VSX and in-editor page. The repository is private, so nothing here may
+     load from GitHub: no images, no links into the repo. GitHub shows .github/README.md instead. -->
+
 <h1 align="center">Code Context</h1>
 <p align="center"><b>Know what you're touching.</b></p>
 

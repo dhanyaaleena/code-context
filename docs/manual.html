@@ -105,40 +105,45 @@
         <p>Opens beside your code. Click another function and it follows you — only when <i>you</i> move, not when an agent edits.</p></div>
     </div>
 
-    <div class="sub" style="margin-top:24px">Reading the panel</div>
-    <div class="grid" style="grid-template-columns:1.12fr 1fr; gap:22px; align-items:start">
-      <div class="pm">
-        <div class="id"><span class="pin" style="margin-right:2px">1</span><span class="s">get_current_user()</span><span class="l">…/auth/deps.py:42</span>
-          <span class="r"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg></span><span class="pin">2</span></div>
-        <div style="display:flex; gap:8px; align-items:flex-start"><span class="pin" style="margin-top:9px">3</span>
-        <div class="ai" style="flex:1">
-          <div class="h"><span class="f">Admin sign-in</span><span class="m">haiku 4 5</span></div>
-          <div class="lead">Checks the login token on every admin request and loads the signed-in user, turning away anyone not yet approved.</div>
-          <div class="risk"><span class="k">IF IT BREAKS</span><span>Every admin page stops loading for every staff member.</span></div>
-        </div></div>
-        <div style="display:flex; gap:8px; align-items:center"><span class="pin" style="margin-top:9px">4</span>
-        <div class="way" style="flex:1"><span class="k">WEB REQUEST</span><span class="v">GET /api/v1/admin/stats</span></div></div>
-        <div style="display:flex; gap:8px; align-items:flex-start"><span class="pin" style="margin-top:11px">5</span><div style="flex:1">
-        <div class="secrow"><span class="tw">▸</span><span class="n">What it does</span><span class="sm">7 steps — calls out, reads, can fail</span></div>
-        <div class="secrow"><span class="tw">▸</span><span class="n">How it got here</span><span class="sm">5 changes, latest 2026-02-02</span></div>
-        <div class="secrow"><span class="tw">▸</span><span class="n">What it touches</span><span class="sm">1 caller · 2 further out</span></div>
-        <div class="secrow"><span class="tw">▸</span><span class="n">Detail</span><span class="sm">the longer version</span></div>
-        </div></div>
+    <div class="sub" style="margin-top:22px">Reading the panel</div>
+    <div class="grid" style="grid-template-columns:1.1fr 1fr; gap:20px; align-items:start">
+      <div style="position:relative; padding-left:27px">
+        <span class="pin" style="position:absolute; left:0; top:12px">1</span>
+        <span class="pin" style="position:absolute; left:0; top:88px">2</span>
+        <span class="pin" style="position:absolute; left:0; top:178px">3</span>
+        <span class="pin" style="position:absolute; left:0; top:230px">4</span>
+        <span class="pin" style="position:absolute; left:0; top:292px">5</span>
+        <div class="pv" style="padding-bottom:6px">
+          <div class="hd"><div class="nm"><div class="s">get_current_user()</div><div class="l">apps/api/app/auth/deps.py · line 42</div></div><span class="r"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg></span></div>
+          <div class="card"><div class="top"><span>Admin sign-in</span><span class="m">Haiku 4.5</span></div>
+            <div class="lead">Checks the login token on every admin request and loads the signed-in user, turning away anyone not yet approved.</div></div>
+          <div class="jy">
+            <div class="jr"><span class="mth get">GET</span><span class="p">/api/v1/admin/stats</span></div>
+            <div class="jr"><span class="f">admin_stats()</span><span class="n">handler</span></div>
+            <div class="jr here"><span class="f">get_current_user()</span><span class="n">this function</span></div>
+            <div class="jmore">+1 more way in</div>
+          </div>
+          <div class="stats"><span>4 callers</span><span>2 calls</span><span class="bad">no tests</span><span>5 changes</span></div>
+          <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">What it does</span><span class="sm">7 steps · reads, can fail</span></div>
+          <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">How it got here</span><span class="sm">latest Feb 2026</span></div>
+          <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">What it touches</span><span class="sm">map · 6 further out</span></div>
+          <div class="sr"><svg viewBox="0 0 16 16" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg><span class="t">Detail</span><span class="sm">2 cautions</span></div>
+        </div>
       </div>
 
       <div class="legend">
-        <span class="pin">1</span><p><b>Which function.</b> Its name and where it lives. If the file has unsaved edits, it says <span class="mono" style="font-size:10.5px">EDITED SINCE</span> and the commit.</p>
-        <span class="pin">2</span><p><b>Re-analyse.</b> Rebuilds everything and asks the AI again. Spins amber while it works.</p>
-        <span class="pin">3</span><p><b>The plain-language summary.</b> The feature it belongs to, one sentence on what it does, and who notices if it breaks. <b>The amber left border means an AI wrote it.</b></p>
-        <span class="pin">4</span><p><b>How the world gets in.</b> The URL, scheduled job, command or event that ends up here — found by reading your framework's routing, not guessed.</p>
+        <span class="pin">1</span><p><b>Which function</b>, with its file and line. The <b>↻</b> button on the right <b>re-analyses</b> it.</p>
+        <span class="pin">2</span><p><b>The summary.</b> The product area it belongs to, and one sentence on what it does. <b>The amber bar means an AI wrote it</b>; the model is named on the right.</p>
+        <span class="pin">3</span><p><b>The journey.</b> How the outside world gets here: the route with its method badge, the handler it lands in, then this function. Every row is a click to that code.</p>
+        <span class="pin">4</span><p><b>The numbers.</b> Callers, calls, tests and changes in one line. "No tests" is flagged in red.</p>
         <span class="pin">5</span><p><b>Four sections, collapsed.</b> Each summary line is worth reading alone. Open one and it stays open next time.</p>
       </div>
     </div>
 
-    <div class="callout" style="margin-top:22px">
+    <div class="callout" style="margin-top:20px">
       <div class="t">The one rule to remember</div>
       <p>Anything with an <b style="color:var(--acc2)">amber left border</b> was written by an AI from the evidence. Everything else —
-      steps, routes, callers, commits — was computed directly from your code and Git, and doesn't depend on a model.</p>
+      the journey, steps, callers, commits — was computed directly from your code and Git, and doesn't depend on a model.</p>
     </div>
 
     <div class="sub" style="margin-top:24px">What the AI is never allowed to do</div>
@@ -165,29 +170,38 @@
     <div class="grid g2" style="gap:18px; align-items:start">
       <div>
         <h2>What it does</h2>
-        <p style="font-size:12.5px">The function's steps in order — read from its body, then put into plain words by the AI.
+        <p style="font-size:12.5px">The function's steps as a timeline — read from its body, then put into plain words by the AI.
         Click a step to jump to that line.</p>
-        <div class="pm" style="margin-top:10px">
-          <div class="inl"><div class="tg">AI · PLAIN LANGUAGE</div><p>Needs a login token from the user and access to the user database.</p></div>
-          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">1</span><span class="t">Checks the login token is genuine</span></div>
-          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">2</span><span class="t">Finds which user it belongs to</span></div>
-          <div class="st"><span class="n" style="color:var(--red);border-color:var(--red)">3</span><span class="t">Refuses the request if there's no user</span></div>
-          <div class="st"><span class="n" style="color:var(--acc);border-color:var(--acc)">4</span><span class="t">Hands back the user's details</span></div>
+        <div class="pv" style="margin-top:10px">
+          <div class="inl" style="margin-top:0"><div class="tg">In plain language</div>
+            <p class="dm" style="margin-bottom:5px">Needs a login token from the user and access to the user database.</p>
+            <div class="tl">
+              <div class="i"><span class="d rd"></span>Checks the login token is genuine</div>
+              <div class="i"><span class="d rd"></span>Finds which user it belongs to</div>
+              <div class="i"><span class="d er"></span>Refuses the request if there's no user</div>
+              <div class="i"><span class="d rt"></span>Hands back the user's details</div>
+            </div>
+            <div class="key"><span class="rd">reads or calls</span><span class="er">can fail</span><span class="rt">returns</span></div>
+          </div>
         </div>
-        <p style="font-size:11.5px; margin-top:8px"><span style="color:var(--acc3)">●</span> reads &nbsp; <span style="color:var(--acc2)">●</span> writes &nbsp; <span style="color:var(--red)">●</span> can fail &nbsp; <span style="color:var(--acc)">●</span> returns</p>
+        <p style="font-size:11.5px; margin-top:8px">Four colours: <span style="color:#4daafc">reads or calls</span>, <span style="color:#c586c0">changes data</span>,
+        <span style="color:#e08b7a">can fail</span>, <span style="color:#7fd1b9">returns</span>. The key lists only the ones used.</p>
       </div>
 
       <div>
         <h2>How it got here</h2>
-        <p style="font-size:12.5px">Why the function exists, then the changes since. The commit that first added it is marked
-        <span class="mono" style="font-size:10px">ADDED HERE</span>. Click a commit to see its diff.</p>
-        <div class="pm" style="margin-top:10px">
-          <div class="inl"><div class="tg">AI · WHY IT EXISTS</div><p>Added so only approved staff could reach the admin tools, once Firebase replaced passwords.</p>
-            <p style="margin-top:5px; padding-top:5px; border-top:1px dashed #3a3a3a">Since tightened to turn away users still waiting for approval.</p></div>
-          <div class="hr"><span class="d">2026-02-02</span><span>Reject unapproved users at the door</span></div>
-          <div class="hr"><span class="d">2025-05-14</span><span>Add Firebase admin auth<span class="added">ADDED HERE</span></span></div>
+        <p style="font-size:12.5px">Why the function exists, then the changes since as a timeline. The commit that first added it is
+        marked <i>added here</i>. Click a commit to see its diff.</p>
+        <div class="pv" style="margin-top:10px">
+          <div class="inl" style="margin-top:0">
+            <p>Added so only approved staff could reach the admin tools, once Firebase replaced passwords.</p>
+            <p class="since">Since tightened to turn away users still waiting for approval.</p></div>
+          <div class="hl">
+            <div class="hi"><span class="d"></span><div><div class="h">Reject unapproved users at the door</div><div class="mt">2 Feb 2026 · Dhanya K · <span class="bad">AI-assisted</span></div></div></div>
+            <div class="hi"><span class="d"></span><div><div class="h">Add Firebase admin auth<span class="ad">added here</span></div><div class="mt">14 May 2025 · Dhanya K</div></div></div>
+          </div>
         </div>
-        <p style="font-size:11.5px; margin-top:8px">Says <b>· inferred</b> when the commits never gave a reason and the AI worked it out from what the code serves.</p>
+        <p style="font-size:11.5px; margin-top:8px">When no commit gave a reason, the box starts with <b>inferred</b> — the AI worked it out from what the code serves.</p>
       </div>
 
       <div>
@@ -195,28 +209,29 @@
         <p style="font-size:12.5px">A small map: who calls this above, what it calls below. Click any box to go there —
         this is how you walk a codebase.</p>
         <svg viewBox="0 0 330 150" width="100%" style="margin-top:10px; background:#1e1e1e; border:1px solid var(--line2); border-radius:9px">
-          <rect x="30" y="16" width="120" height="26" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="90" y="33" text-anchor="middle" font-size="9.5" fill="#ccc" class="mono">admin_stats()</text>
-          <rect x="180" y="16" width="120" height="26" rx="5" fill="#252526" stroke="#4a4a4a" stroke-dasharray="4 3"/><text x="240" y="33" text-anchor="middle" font-size="9.5" fill="#ccc" class="mono">export_report()</text>
-          <line x1="90" y1="42" x2="165" y2="62" stroke="#666"/><line x1="240" y1="42" x2="165" y2="62" stroke="#e08b7a" stroke-dasharray="4 3"/>
-          <rect x="95" y="62" width="140" height="30" rx="6" fill="#1c2a1f" stroke="#89d185"/><text x="165" y="81" text-anchor="middle" font-size="10" fill="#eef2f6" class="mono">get_current_user()</text>
-          <line x1="165" y1="92" x2="165" y2="110" stroke="#666"/>
-          <rect x="105" y="110" width="120" height="26" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="165" y="127" text-anchor="middle" font-size="9.5" fill="#ccc" class="mono">load_profile()</text>
+          <rect x="20" y="14" width="136" height="32" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="30" y="28" font-size="9.5" fill="#4daafc" class="mono">admin_stats</text><text x="30" y="40" font-size="8" fill="#9d9d9d" class="mono">routes.py</text>
+          <rect x="174" y="14" width="136" height="32" rx="5" fill="#252526" stroke="#e08b7a" stroke-dasharray="4 3"/><text x="184" y="28" font-size="9.5" fill="#4daafc" class="mono">current_admin</text><text x="184" y="40" font-size="8" fill="#9d9d9d" class="mono">export.py</text>
+          <path d="M88 46 C88 56 150 56 150 64" fill="none" stroke="#777"/><path d="M242 46 C242 56 180 56 180 64" fill="none" stroke="#e08b7a" stroke-dasharray="4 3"/>
+          <rect x="70" y="64" width="190" height="34" rx="6" fill="#1c2a1f" stroke="#89d185"/><text x="165" y="80" text-anchor="middle" font-size="10" fill="#eef2f6" class="mono">get_current_user()</text><text x="165" y="92" text-anchor="middle" font-size="8" fill="#89d185">this function</text>
+          <path d="M165 98 V110" fill="none" stroke="#777"/>
+          <rect x="97" y="110" width="136" height="30" rx="5" fill="#252526" stroke="#4a4a4a"/><text x="107" y="123" font-size="9.5" fill="#4daafc" class="mono">load_profile</text><text x="107" y="135" font-size="8" fill="#9d9d9d" class="mono">service.py</text>
         </svg>
-        <p style="font-size:11.5px; margin-top:8px"><b>Dashed</b> lines are guesses — the name matched but no import proves the link. Treat them as leads to check.</p>
+        <p style="font-size:11.5px; margin-top:8px"><b>Dashed</b> links are guesses — the name matched but no import proves it. Treat them as leads to check.</p>
       </div>
 
       <div>
         <h2>Detail</h2>
-        <p style="font-size:12.5px">The longer version for when you need it: the computed summary, test files that reference the function,
-        the commit the index was built at, and the evidence the AI cited.</p>
-        <div class="card" style="margin-top:10px">
-          <div class="lbl">Good to know</div>
-          <ul class="clean">
-            <li><b>No tests?</b> Detail says so, and the AI raises it as a caution when it matters.</li>
-            <li><b>Evidence ids</b> like <code>step:2</code> or <code>commit:827fb4e</code> show exactly which facts a sentence came from.</li>
-            <li><b>Low confidence</b> means the evidence was thin — the AI is told to say less rather than guess.</li>
-          </ul>
+        <p style="font-size:12.5px">The longer version for when you need it.</p>
+        <div class="pv" style="margin-top:10px">
+          <div class="dl"><span class="k">If it breaks</span><span>Every admin page stops loading for every staff member.</span></div>
+          <div class="dl"><span class="k">Tests</span><span>No test file references this</span></div>
+          <div class="dl"><span class="k">As of commit</span><span class="mono" style="font-size:10px">be44c8b</span></div>
+          <div class="dl" style="margin-bottom:0"><span class="k">Evidence</span><span class="mono" style="font-size:10px;color:#9d9d9d">entry:0 · step:2 · commit:827fb4e</span></div>
         </div>
+        <ul class="clean" style="margin-top:10px">
+          <li><b>Watch out</b> items appear at the top when the evidence warrants them — no tests, a recent AI-assisted change.</li>
+          <li><b>Evidence</b> ids show exactly which facts the sentences came from.</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -254,39 +269,20 @@
     <div class="grid" style="grid-template-columns:1fr 1fr; gap:18px; margin-top:16px; align-items:start">
       <div>
         <div class="sub" style="margin-top:0">Computed from the code — no AI</div>
-        <div class="pm">
-          <div class="st"><span class="n">1</span><span class="t">works out cutoff</span></div>
-          <div class="st"><span class="n">2</span><span class="t">goes through each ap_payments</span></div>
-          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">3</span><span class="t">looks up due raw</span></div>
-          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">4</span><span class="t">looks up pay raw</span></div>
-          <div class="st"><span class="n">5</span><span class="t">parse utc</span></div>
-          <div class="st"><span class="n">6</span><span class="t">adds to valid</span></div>
-          <div class="st"><span class="n">7</span><span class="t">keeps only the valid where d &gt; 0</span></div>
-          <div class="st"><span class="n" style="color:var(--acc);border-color:var(--acc)">8</span><span class="t">returns round(len(late) / len(valid), 2)…</span></div>
-        </div>
+        <div class="pv"><div class="tl plain"><div class="i"><span class="d fl"></span>works out cutoff</div><div class="i"><span class="d fl"></span>goes through each ap_payments</div><div class="i"><span class="d rd"></span>looks up due raw</div><div class="i"><span class="d rd"></span>looks up pay raw</div><div class="i"><span class="d rd"></span>parse utc</div><div class="i"><span class="d fl"></span>adds to valid</div><div class="i"><span class="d rd"></span>keeps only the valid where d &gt; 0</div><div class="i"><span class="d rt"></span>returns round(len(late) / len(valid), 2)…</div></div></div>
         <p style="font-size:11.5px; margin-top:8px">Real extractor output. Accurate, but in the code's own vocabulary.</p>
       </div>
       <div>
         <div class="sub" style="margin-top:0">With the AI layer — same steps, same order</div>
-        <div class="pm">
-          <div class="inl" style="margin-top:0"><div class="tg">AI · PLAIN LANGUAGE</div>
-          <div class="st"><span class="n">1</span><span class="t">Sets the window to the last 90 days</span></div>
-          <div class="st"><span class="n">2</span><span class="t">Goes through each supplier payment</span></div>
-          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">3</span><span class="t">Reads when the bill was due</span></div>
-          <div class="st"><span class="n" style="color:var(--acc3);border-color:var(--acc3)">4</span><span class="t">Reads when it was actually paid</span></div>
-          <div class="st"><span class="n">5</span><span class="t">Turns the payment date into a comparable time</span></div>
-          <div class="st"><span class="n">6</span><span class="t">Records how many days late or early it was</span></div>
-          <div class="st"><span class="n">7</span><span class="t">Keeps only the payments that were late</span></div>
-          <div class="st"><span class="n" style="color:var(--acc);border-color:var(--acc)">8</span><span class="t">Returns the share paid late, e.g. 0.25</span></div></div>
-        </div>
-        <p style="font-size:11.5px; margin-top:8px">Illustrative — the wording varies between runs; the numbering never does.</p>
+        <div class="pv"><div class="inl" style="margin:0"><div class="tg">In plain language</div><div class="tl "><div class="i"><span class="d fl"></span>Sets the window to the last 90 days</div><div class="i"><span class="d fl"></span>Goes through each supplier payment</div><div class="i"><span class="d rd"></span>Reads when the bill was due</div><div class="i"><span class="d rd"></span>Reads when it was actually paid</div><div class="i"><span class="d rd"></span>Turns the payment date into a comparable time</div><div class="i"><span class="d fl"></span>Records how many days late or early it was</div><div class="i"><span class="d rd"></span>Keeps only the payments that were late</div><div class="i"><span class="d rt"></span>Returns the share paid late, e.g. 0.25</div></div></div></div>
+        <p style="font-size:11.5px; margin-top:8px">Illustrative — the wording varies between runs; the order never does.</p>
       </div>
     </div>
 
     <div class="card" style="margin-top:16px">
       <div class="lbl amber">And at the top of the panel</div>
-      <p><b style="color:var(--acc2)">SUPPLIER PAYMENT SCORING</b> — Works out what share of a supplier's bills were paid late in the last
-      90 days. <span style="color:var(--ink3)">If it breaks:</span> payment-risk scores go wrong or blank, and anything that ranks suppliers by them misreads who is reliable.</p>
+      <p><b style="color:var(--ink)">Supplier payment scoring</b> — Works out what share of a supplier's bills were paid late in the last
+      90 days. <span style="color:var(--ink3)">Detail adds what breaks:</span> payment-risk scores go wrong or blank, and anything that ranks suppliers by them misreads who is reliable.</p>
     </div>
   </div>
   <div class="foot"><span>Code Context · User manual</span><span>5</span></div>
@@ -301,14 +297,11 @@
 
   <div class="body" style="margin-top:20px">
     <div class="grid" style="grid-template-columns:1.05fr 1fr; gap:20px; align-items:start">
-      <div class="pm">
-        <div class="id"><span class="s">get_current_user()</span><span class="l">…/auth/deps.py:42</span>
-          <span class="r" style="color:var(--acc2); border:1px solid #3a3a3a"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg></span></div>
+      <div class="pv">
+        <div class="hd"><div class="nm"><div class="s">get_current_user()</div><div class="l">apps/api/app/auth/deps.py · line 42</div></div><span class="r" style="color:var(--acc2); border:1px solid #3c3c3c; border-radius:4px; padding:2px 3px"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.45 5.17A6 6 0 1 0 14 8h-1.5a4.5 4.5 0 1 1-.9-2.7L9.5 7.5H14V3l-.55 2.17z"/></svg></span></div>
         <div class="stale"><span class="dot"></span><span class="msg">This function changed since it was analysed.</span><span class="act">Re-analyse</span></div>
-        <div class="ai" style="opacity:.85">
-          <div class="h"><span class="f">Admin sign-in</span><span class="m">haiku 4 5</span></div>
-          <div class="lead">Checks the login token on every admin request and loads the signed-in user…</div>
-        </div>
+        <div class="card"><div class="top"><span>Admin sign-in</span><span class="m">Haiku 4.5</span></div>
+          <div class="lead">Checks the login token on every admin request and loads the signed-in user…</div></div>
       </div>
       <ul class="clean">
         <li><b>You're told, not interrupted.</b> Within about half a second of the function changing, the bar appears and the button turns amber. The old answer stays readable.</li>

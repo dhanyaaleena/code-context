@@ -4,6 +4,7 @@ node_modules/**
 out/**
 src/**
 .vscode/**
+.github/**
 docs/**
 fixtures/**
 scripts/**

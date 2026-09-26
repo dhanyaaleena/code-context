@@ -120,24 +120,24 @@ button { font: inherit; }
 .lbl { font-size: 11px; font-weight: 600; color: var(--cc-dim); margin: 0 0 6px; }
 
 /* ---- what it does: a timeline ---- */
-.needs { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--cc-dim); }
-.facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; margin-bottom: 8px; }
+.needs { margin: 0 0 6px; font-size: 12px; line-height: 1.45; color: var(--cc-dim); }
+.facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; margin-bottom: 6px; }
 .facts .lbl { margin: 0 4px 0 0; }
-.tl { list-style: none; margin: 4px 0 0; padding: 0; position: relative; }
-.tl::before { content: ""; position: absolute; left: 7.5px; top: 10px; bottom: 10px; border-left: 1.5px solid var(--cc-line); }
-.tl li { position: relative; display: flex; gap: 10px; align-items: baseline; padding: 3px 6px 3px 0;
+.tl { list-style: none; margin: 2px 0 0; padding: 0; position: relative; }
+.tl::before { content: ""; position: absolute; left: 7.5px; top: 8px; bottom: 8px; border-left: 1.5px solid var(--cc-line); }
+.tl li { position: relative; display: flex; gap: 8px; align-items: baseline; padding: 1px 6px 1px 0;
          border-radius: 4px; }
 .tl li.hit:hover { background: var(--cc-hover); }
 .tl .dot { position: relative; top: 1px; flex: 0 0 16px; display: flex; justify-content: center; }
-.tl .dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+.tl .dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor;
                    box-shadow: 0 0 0 3px var(--vscode-editor-background); }
-.tl .txt { font-size: 12.5px; line-height: 1.45; }
+.tl .txt { font-size: 12px; line-height: 1.4; }
 .k-read { color: var(--cc-link); }
 .k-write { color: var(--cc-purple); }
 .k-error { color: var(--cc-red); }
 .k-return { color: var(--cc-acc); }
 .k-flow { color: var(--cc-dim); }
-.key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11px; color: var(--cc-dim); }
+.key { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px; font-size: 11px; color: var(--cc-dim); }
 .key span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
                     margin-right: 5px; vertical-align: 0; }
 .key .k-read::before { background: var(--cc-link); }
@@ -199,11 +199,11 @@ svg.map .dim { opacity: .65; }
 .evidence .lbl { margin: 0 4px 0 0; }
 
 /* ---- model-written content inside a section carries the same amber rule ---- */
-.ai-inline { border-left: 2px solid var(--cc-warn); background: var(--cc-card); padding: 9px 11px; margin-bottom: 10px; }
-.aitag { display: block; font-size: 11px; font-weight: 600; color: var(--cc-warn); margin-bottom: 6px; }
+.ai-inline { border-left: 2px solid var(--cc-warn); background: var(--cc-card); padding: 8px 10px; margin-bottom: 8px; }
+.aitag { display: block; font-size: 11px; font-weight: 600; color: var(--cc-warn); margin-bottom: 4px; }
 .ai-inline .tl { margin-top: 0; }
 .ai-inline .tl .dot::before { box-shadow: 0 0 0 3px var(--cc-card); }
-.ai-inline .needs { margin-bottom: 8px; }
+.ai-inline .needs { margin-bottom: 6px; }
 
 /* Still working: the amber rule breathes rather than sitting solid. */
 .ai-inline.pending { animation: ccbreathe 1.6s ease-in-out infinite; }
