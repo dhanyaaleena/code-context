@@ -67,7 +67,14 @@ locally from your code and Git, and doesn't depend on a model.
 
 ## Getting started
 
-1. Install **Code Context Lens** from the Extensions view (search "Code Context Lens") and open a Python or Go project that uses Git.
+1. Install **Code Context Lens** from the Extensions view — search for `code-context-lens` — and open a Python
+   or Go project that uses Git. Or from a terminal:
+
+   ```bash
+   code --install-extension dhanyaaleena.code-context-lens      # VS Code
+   cursor --install-extension dhanyaaleena.code-context-lens    # Cursor
+   ```
+
 2. Click the lens above any function — `3 callers · 5 calls — Show context` — or run
    **Code Context: Show context panel** from the command palette.
 
