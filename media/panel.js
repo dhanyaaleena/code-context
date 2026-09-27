@@ -23,6 +23,8 @@
   let spinning = false;
   /** The function's code changed after this was analysed. */
   let stale = false;
+  /** AI on or off, and whether any key exists — sent by the extension. */
+  let ai = { enabled: false, hasKey: false, known: false };
   /** "Break it down": every computed step instead of the model's stages. Remembered. */
   let everyStep = false;
 
@@ -58,6 +60,11 @@
       stale = false;
       lastCtx = next;
       render(lastCtx);
+    } else if (e.data.type === 'ai') {
+      ai = { enabled: !!e.data.enabled, hasKey: !!e.data.hasKey, known: true };
+      if (lastCtx) {
+        render(lastCtx);
+      }
     } else if (e.data.type === 'stale') {
       stale = !!e.data.on;
       if (lastCtx) {
@@ -94,7 +101,7 @@
   function render(ctx) {
     persist();
     lastWidth = root.clientWidth;
-    root.innerHTML = [headline(ctx), journey(ctx), stats(ctx), sections(ctx)].join('');
+    root.innerHTML = [headline(ctx), sections(ctx)].join('');
     wire(ctx);
     requestAnimationFrame(syncPulse);
   }
@@ -126,13 +133,22 @@
     // written by the model. Keeping that boundary visible is the trust mechanism,
     // so it survives even when there is no narration to put in it.
     const busy = spinning || (narration && narration.state === 'loading');
+    // One control for AI: a switch whose label says what it does. Off, it
+    // offers to explain; with no key yet, clicking it opens setup.
+    const aiRow = ai.known
+      ? `<button class="aiswitch${ai.enabled ? ' on' : ''}" id="aiswitch" role="switch" aria-checked="${ai.enabled}"
+              title="${ai.enabled ? 'Turn AI explanations off — your API key is kept' : ai.hasKey ? 'Turn on AI explanations' : 'Set up AI: choose a provider and add a key'}">
+          <span class="track"><span class="knob"></span></span><span class="ai-lbl">✨ ${ai.enabled ? 'AI on' : '<span class="long">Explain with </span>AI'}</span></button>`
+      : '';
     const ident = `<div class="ident">
       <div class="names">
-        <div class="sym">${esc(ctx.symbol.qualified)}()</div>
-        <div class="loc">${esc(ctx.symbol.file)} · line ${ctx.symbol.startLine + 1}${edited}</div>
+        <div class="sym" title="${esc(ctx.symbol.qualified)}() — ${esc(ctx.symbol.file)} · line ${ctx.symbol.startLine + 1}">${esc(ctx.symbol.qualified)}()${edited}</div>
       </div>
-      <button class="iconbtn reanalyse${busy ? ' busy' : ''}${stale && !busy ? ' stale' : ''}" id="reanalyse"
-              title="Re-analyse" aria-label="Re-analyse this function"${busy ? ' disabled' : ''}>${ICON.refresh}</button>
+      <div class="ctrls">${aiRow}
+        <button class="iconbtn reanalyse${busy ? ' busy' : ''}${stale && !busy ? ' stale' : ''}" id="reanalyse"
+                title="Re-analyse" aria-label="Re-analyse this function"${busy ? ' disabled' : ''}>${ICON.refresh}</button>
+      </div>
+      ${facts(ctx)}
     </div>`;
 
     // Changed code is announced, never re-analysed behind the reader's back.
@@ -155,12 +171,14 @@
             : ctx.summary;
       // Not set up yet — no key, AI never turned on. Only then; a request
       // that failed says why and offers Try again instead.
-      if (narration && narration.state === 'setup') {
-        return `${ident}${staleBar}<div class="ai setup">
-          <p class="setup-text">Add an API key to see this function explained in everyday words.</p>
-          <p class="setup-act"><button class="setupbtn" data-setup>Set up AI</button>
-            <span class="setup-alt">or ${/Mac/.test(navigator.platform) ? '⇧⌘P' : 'Ctrl+Shift+P'} → <i>Code Context: Set API key</i></span></p>
-        </div><p class="plainsum">${esc(ctx.summary)}</p>`;
+      // AI is off: no summary box. The computed one only restated the journey
+      // and the numbers shown right below; Detail still has it.
+      if (!narration || narration.state === 'setup') {
+        // No key saved yet: one line saying what a key gets you.
+        const nokey = ai.known && !ai.hasKey
+          ? `<button class="nokey" data-setup>Get the full picture, turn the toggle on, and AI will explain this function.</button>`
+          : '';
+        return `${ident}${staleBar}${nokey}`;
       }
       // An error is not "still working": no pulse, and a way to ask again.
       const failed = narration && narration.state === 'error';
@@ -181,51 +199,32 @@
   }
 
   /**
-   * The journey strip: from the outside world to this function.
-   *
-   * A route, then the handler it lands in, then this function. It shows the
-   * first way in; the rest are one click away. Functions nobody reaches from a
-   * route, job or command simply don't get a strip.
+   * One line under the name: how the outside world reaches it (the first way
+   * in, "+N" for the rest), then the numbers. The route jumps to its handler.
    */
-  function journey(ctx) {
+  function facts(ctx) {
     const entries = ctx.isEntryPoint ? [ctx.isEntryPoint] : ctx.reachedFrom || [];
-    if (!entries.length) {
-      return '';
-    }
     const [first, ...rest] = entries;
-    const handler = first.symbol;
-    const direct = ctx.isEntryPoint || handler.qualified === ctx.symbol.qualified;
-    const rows = [
-      entryRow(first),
-      direct
-        ? ''
-        : `<div class="jrow hit" data-file="${esc(handler.file)}" data-line="${handler.line}" title="${esc(handler.file)}">
-             <span class="jfn">${esc(handler.name)}()</span><span class="jnote">handler</span>
-           </div>`,
-      `<div class="jrow here"><span class="jfn">${esc(ctx.symbol.name)}()</span><span class="jnote">this function</span></div>`
-    ].join('');
-    const more = rest.length
-      ? `<details class="jmore"><summary>+${rest.length} more way${rest.length === 1 ? '' : 's'} in</summary>${rest
-          .map(entryRow)
-          .join('')}</details>`
+    const way = first
+      ? `<span class="way hit" data-file="${esc(first.symbol.file)}" data-line="${first.symbol.line}" title="${esc(
+          [first, ...rest].map((e) => e.label).join('\n')
+        )}">${entryBits(first)}${rest.length ? `<span class="more">+${rest.length}</span>` : ''}</span>`
       : '';
-    return `<div class="journey">${rows}${more}</div>`;
+    return `<div class="facts-line">${[way, ...statBits(ctx)].filter(Boolean).map((b) => `<span>${b}</span>`).join('')}</div>`;
   }
 
-  function entryRow(e) {
+  function entryBits(e) {
     const http = e.kind === 'http' ? /^([A-Z]+(?:\/[A-Z]+)*)\s+(.+)$/.exec(e.label) : null;
     const badge = http
       ? `<span class="method m-${METHOD_CLASS[http[1].split('/')[0]] || 'other'}">${esc(http[1])}</span>`
       : `<span class="method m-other">${esc(KIND_BADGE[e.kind] || e.kind)}</span>`;
     const text = http ? http[2] : e.label.replace(/^(background job|scheduled|command):\s*|^rpc\s+/, '');
-    return `<div class="jrow hit" data-file="${esc(e.symbol.file)}" data-line="${e.symbol.line}"
-                 title="${esc(e.label)}${e.detail ? ' · ' + esc(e.detail) : ''}">
-      ${badge}<span class="jpath">${esc(text)}</span>
-    </div>`;
+    return `${badge}<span class="jpath">${esc(text)}</span>`;
   }
 
+
   /** The numbers worth knowing, in one quiet line. Nothing is repeated below. */
-  function stats(ctx) {
+  function statBits(ctx) {
     const bits = [];
     const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
     if (ctx.callers.length) {
@@ -244,11 +243,7 @@
     if (changes) {
       bits.push(plural(changes, 'change'));
     }
-    const ai = ctx.history.filter((h) => h.aiAssisted).length;
-    if (ai) {
-      bits.push(`<span class="bad">${ai} AI-assisted</span>`);
-    }
-    return `<div class="stats">${bits.map((b) => `<span>${b}</span>`).join('')}</div>`;
+    return bits;
   }
 
   /* ---------------------------------------------------------- the disclosures */
@@ -988,6 +983,13 @@
       again.addEventListener('click', reanalyse);
     }
     root.querySelectorAll('[data-retry]').forEach((el) => el.addEventListener('click', reanalyse));
+    const aiswitch = root.querySelector('#aiswitch');
+    if (aiswitch) {
+      aiswitch.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        vscode.postMessage({ type: 'toggleAi' });
+      });
+    }
     root.querySelectorAll('[data-setup]').forEach((el) =>
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();

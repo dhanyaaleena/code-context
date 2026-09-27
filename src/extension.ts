@@ -8,7 +8,7 @@ import { PACK_SELECTOR, isCodeDocument, symbolsFor } from './symbols';
 import { clearAll, getContext } from './cache';
 import { indexStats, invalidateIndex, updateFile, watchWorkspace } from './repoIndex';
 import { repoRootFor, showCommit } from './git';
-import { aiEnabled, editorModelLabel, editorModels, narrate, pickEditorModel, setApiKey } from './ai';
+import { aiEnabled, aiReady, editorModelLabel, editorModels, narrate, pickEditorModel, setApiKey, toggleAi } from './ai';
 type Sym = CodeSymbol;
 
 
@@ -46,6 +46,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     if (!ContextPanel.current) {
       return;
     }
+    void postAiState();
     if (!aiEnabled()) {
       // AI isn't on: invite the reader to set it up, in the summary block.
       ContextPanel.current.narration({ state: 'setup' });
@@ -70,6 +71,11 @@ export function activate(ctx: vscode.ExtensionContext): void {
       }
       ContextPanel.current?.narration(result);
     }, delay);
+  }
+
+  /** Tell the panel whether AI is on, and whether a model and its key are set up. */
+  async function postAiState(): Promise<void> {
+    ContextPanel.current?.aiState({ enabled: aiEnabled(), hasKey: await aiReady(ctx) });
   }
 
   /**
@@ -275,6 +281,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('codeContext.setApiKey', async () => {
       await setApiKey(ctx);
+      void postAiState();
       // A key just saved turns AI on; describe the function on screen now.
       if (aiEnabled() && ContextPanel.current) {
         void refreshFocus(false);
@@ -283,8 +290,13 @@ export function activate(ctx: vscode.ExtensionContext): void {
     // Turning AI on or off in settings.json shows up without moving the cursor.
     vscode.workspace.onDidChangeConfiguration((e) => {
       if ((e.affectsConfiguration('codeContext.ai.enabled') || e.affectsConfiguration('codeContext.ai.model')) && ContextPanel.current) {
+        void postAiState();
         void refreshFocus(false);
       }
+    }),
+    vscode.commands.registerCommand('codeContext.toggleAi', async () => {
+      await toggleAi(ctx);
+      void postAiState();
     }),
 
     // Answers "does this editor give extensions any models?" from the editor

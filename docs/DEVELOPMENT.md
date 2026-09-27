@@ -100,7 +100,8 @@ routes of the handlers that reach it, which is how `get_current_admin` becomes
 the deterministic evidence into plain language: a human feature name, what the
 code does, how it is reached, and what breaks.
 
-- **Model:** `codeContext.ai.model`, default **`claude-haiku-4-5`**. This is
+- **Model:** `codeContext.ai.model` — no default; turning AI on asks the user to pick one, with
+  **`claude-haiku-4-5`** (or each provider's cheapest) marked Recommended. This is
   translation over a bundle that was already assembled — not a reasoning task —
   so the cheapest model is the right default at roughly $1/$5 per million tokens
   against Opus's $5/$25. Sonnet 5 and Opus 5 are selectable if Haiku's feature

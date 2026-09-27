@@ -58,6 +58,8 @@ export class ContextPanel {
           onReanalyse();
         } else if (msg?.type === 'setupAi') {
           void vscode.commands.executeCommand('codeContext.setApiKey');
+        } else if (msg?.type === 'toggleAi') {
+          void vscode.commands.executeCommand('codeContext.toggleAi');
         }
       },
       null,
@@ -76,6 +78,11 @@ export class ContextPanel {
   }
 
   /** Folded in when the model answers; the panel is already useful without it. */
+  /** Whether AI is on, and whether any key exists — drives the panel's AI switch. */
+  aiState(state: { enabled: boolean; hasKey: boolean }): void {
+    void this.panel.webview.postMessage({ type: 'ai', ...state });
+  }
+
   narration(payload: Narration | { state: 'loading' } | { state: 'setup'; provider?: string }): void {
     void this.panel.webview.postMessage({ type: 'narration', payload });
   }

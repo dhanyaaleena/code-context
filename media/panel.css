@@ -32,9 +32,41 @@ button { font: inherit; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- header ---- */
-.ident { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-.ident .names { flex: 1; min-width: 0; }
-.ident .sym { font-family: var(--cc-mono); font-size: 13px; font-weight: 600; word-break: break-all; }
+.ident { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 12px; container-type: inline-size; }
+.ident .names { flex: 1 1 0; min-width: 0; }
+/* one line under the name: the way in, then the numbers */
+.facts-line { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; margin-top: 2px;
+              font-size: 12px; color: var(--cc-dim); }
+.facts-line > span + span::before { content: "·"; margin-right: 7px; opacity: .6; }
+.facts-line .bad { color: var(--cc-red); }
+.facts-line .way { display: inline-flex; align-items: center; gap: 6px; border-radius: 3px; padding: 0 2px; margin-left: -2px; }
+.facts-line .way:hover { background: var(--cc-hover); }
+.facts-line .way .jpath { color: var(--vscode-foreground); font-size: 12px; }
+.facts-line .way .more { font-size: 11px; color: var(--cc-dim); }
+/* top right: the AI switch, then re-analyse */
+.ident .ctrls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
+@container (max-width: 400px) { .aiswitch .long { display: none; } }
+/* the AI switch: on/off only — turning it off keeps the key. A bordered pill so it reads as a control. */
+.aiswitch { display: inline-flex; flex-shrink: 0; white-space: nowrap; align-items: center; gap: 7px; height: 26px; padding: 0 10px 0 7px; margin-top: 0;
+            border: 1px solid var(--cc-dim); border-radius: 13px; background: var(--cc-card);
+            color: var(--vscode-foreground); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.aiswitch:hover { border-color: var(--cc-warn); }
+.aiswitch:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--cc-link)); outline-offset: 2px; }
+.aiswitch .track { position: relative; width: 28px; height: 16px; border-radius: 8px; flex-shrink: 0;
+                   background: transparent; border: 1.5px solid var(--cc-dim); box-sizing: border-box;
+                   transition: background .15s, border-color .15s; }
+.aiswitch .knob { position: absolute; top: 2px; left: 2px; width: 9px; height: 9px; border-radius: 50%;
+                  background: var(--cc-dim); transition: left .15s, background .15s; }
+.aiswitch .ai-lbl { color: var(--vscode-foreground); line-height: 1; }
+/* on: barely there — it's working, and turning it off shouldn't invite a click. Hover brings it back. */
+.aiswitch.on { border-color: transparent; background: transparent; padding: 0 4px; height: 22px; gap: 5px; opacity: .45; }
+.aiswitch.on:hover, .aiswitch.on:focus-visible { opacity: 1; border-color: var(--cc-line); }
+.aiswitch.on .ai-lbl { color: var(--cc-dim); font-weight: 500; font-size: 11px; }
+.aiswitch.on .track { width: 22px; height: 12px; border-radius: 6px; border-width: 1px; border-color: var(--cc-dim);
+                      background: transparent; }
+.aiswitch.on .knob { top: 2px; left: 12px; width: 6px; height: 6px; background: var(--cc-dim); }
+@media (prefers-reduced-motion: reduce) { .aiswitch .track, .aiswitch .knob { transition: none; } }
+.ident .sym { font-family: var(--cc-mono); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ident .loc { margin-top: 2px; font-size: 11px; color: var(--cc-dim); word-break: break-all; }
 .ident .edited { display: inline-block; margin-left: 6px; font-size: 11px; color: var(--cc-dim);
                  border: 1px solid var(--cc-line); border-radius: 3px; padding: 0 5px; }
@@ -76,13 +108,18 @@ button { font: inherit; }
 .ai.plain { border-left-color: var(--cc-line); }
 .ai.plain .lead { font-size: 13px; }
 /* not set up: an invitation, drawn apart from anything a model wrote */
-.ai.setup { border-left-color: var(--cc-link); }
-.setup-text { margin: 0 0 8px; font-size: 12px; color: var(--cc-dim); line-height: 1.45; }
-.setup-act { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.setupbtn { padding: 3px 10px; border: 0; border-radius: 3px; font: inherit; font-size: 12px; cursor: pointer;
+.ai.setup { border-left-color: var(--cc-link); display: flex; flex-wrap: wrap; align-items: center;
+            justify-content: space-between; gap: 6px 12px; padding: 8px 12px; }
+.setup-text { font-size: 12.5px; line-height: 1.45; }
+.setupbtn { flex-shrink: 0; padding: 3px 10px; border: 0; border-radius: 3px; font: inherit; font-size: 12px; cursor: pointer;
             color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, var(--cc-link)); }
 .setupbtn:hover { background: var(--vscode-button-hoverBackground, var(--vscode-button-background, var(--cc-link))); }
-.setup-alt { font-size: 11px; color: var(--cc-dim); }
+/* no key yet: a one-line invitation under the header, left-aligned */
+.nokey { display: block; width: 100%; margin: -2px 0 12px; padding: 7px 10px; text-align: left;
+         border: 0; border-left: 2px solid var(--cc-warn); border-radius: 0 4px 4px 0; background: var(--cc-card);
+         font: inherit; font-size: 12.5px; line-height: 1.45; font-style: italic; color: var(--cc-dim); cursor: pointer; }
+.nokey:hover { background: var(--cc-hover); color: var(--vscode-foreground); }
+.nokey:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--cc-link)); outline-offset: 1px; }
 .plainsum { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--vscode-foreground); }
 /* the model's plain words didn't come through: say so, next to what is shown instead */
 .fallback { margin: 2px 0 8px; padding: 6px 9px; border: 1px dashed var(--cc-line); border-radius: 5px;

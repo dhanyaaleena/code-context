@@ -72,6 +72,10 @@
         "title": "Code Context: Set API key"
       },
       {
+        "command": "codeContext.toggleAi",
+        "title": "Code Context: Turn AI on or off"
+      },
+      {
         "command": "codeContext.listEditorModels",
         "title": "List editor models",
         "category": "Code Context"
@@ -107,7 +111,6 @@
         },
         "codeContext.ai.model": {
           "type": "string",
-          "default": "claude-haiku-4-5",
           "enum": [
             "claude-haiku-4-5",
             "vscode-lm",
@@ -138,7 +141,7 @@
             "xAI. Grok's flagship model.",
             "xAI. The cheapest Grok model in xAI's list."
           ],
-          "markdownDescription": "Model for the plain-language narration. The prefix picks the provider: `claude-*` uses your Anthropic key, `gemini-*` your Google key, `gpt-*` your OpenAI key, `grok-*` your xAI key, and `vscode-lm` the models your editor offers extensions (GitHub Copilot in VS Code) with no key. If the chosen provider has no key set, the editor's models are tried before giving up. Requires `#codeContext.ai.enabled#`."
+          "markdownDescription": "Model for the plain-language narration. The prefix picks the provider: `claude-*` uses your Anthropic key, `gemini-*` your Google key, `gpt-*` your OpenAI key, `grok-*` your xAI key, and `vscode-lm` the models your editor offers extensions (GitHub Copilot in VS Code) with no key. If the chosen provider has no key set, the editor's models are tried before giving up. There is no default: turning AI on asks you to pick one. Requires `#codeContext.ai.enabled#`."
         },
         "codeContext.maxFiles": {
           "type": "number",

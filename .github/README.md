@@ -17,18 +17,22 @@ in a panel beside your code.
 
 ## Reading the panel
 
-**The summary.** The product area the function belongs to, and one sentence on what it does, in words
-anyone on the team can follow. The amber bar on the left means an AI wrote it; the model that answered
-is named on the right.
+**The top line.** Under the function's name: how the outside world reaches it — the route or job, with
+a method badge like `GET` or `POST`, and "+N" when there are more ways in (hover to list them, click to
+jump to the handler) — then callers, calls, tests and changes. "No tests" is flagged in red. It reads your
+framework's routing — for Python: FastAPI, Flask, Celery, APScheduler, Click, Typer and Django signals; for
+Go: net/http, Gin, Echo, Chi, Gorilla mux, Fiber, Cobra, cron jobs, gRPC and `main()`.
 
-**The journey.** How the outside world gets here: the route or job, the handler it lands in, then this
-function. Routes carry a method badge — `GET`, `POST`, `DELETE` — and every row is a click to that code.
-It reads your framework's routing — for Python: FastAPI, Flask, Celery, APScheduler, Click, Typer and
-Django signals; for Go: net/http, Gin, Echo, Chi, Gorilla mux, Fiber, Cobra, cron jobs, gRPC and `main()`.
-Helpers that nothing reaches from outside simply don't get a journey.
+**✨ Explain with AI.** The switch at the top right turns the plain-language layer on and off.
 
-**The numbers.** Callers, calls, tests, changes and AI-assisted commits, in one line. "No tests" is
-flagged in red.
+- **The first time**, it asks three things — provider, model (the cheapest is marked *Recommended*) and
+  your API key — then turns on. Until a model and its key are set up, a line under the name says so:
+  *"Get the full picture, turn the toggle on, and AI will explain this function."*
+- **Once it's on**, the switch fades to a small *✨ AI on* and a summary appears: the product area the
+  function belongs to and one sentence on what it does. The amber bar on the left means an AI wrote it;
+  the model that answered is named on the right.
+- **Turning it off** only turns AI off. Your key and model stay saved, so turning it back on is one click.
+  Nothing is sent anywhere while it's off.
 
 Then four sections, collapsed until you want them. Each remembers whether you left it open.
 
@@ -68,8 +72,8 @@ That's it for the computed view. Nothing leaves your machine.
 
 ### Optional: turn on AI descriptions
 
-Everything above works without AI. To add the plain-language descriptions, click **Set up AI** at the
-top of the panel — it's there until AI is set up. Three quick choices follow:
+Everything above works without AI. To add the plain-language descriptions, click the
+**✨ Explain with AI** switch at the top right of the panel. The first time, three quick choices follow:
 
 1. **Provider** — Anthropic, Google, OpenAI or xAI.
 2. **Model** — the cheapest is listed first and marked *Recommended*; it's plenty for plain-language
@@ -77,7 +81,8 @@ top of the panel — it's there until AI is set up. Three quick choices follow:
 3. **Key** — paste it. If one is already saved, leave the box empty to keep it.
 
 That's all — it turns AI descriptions on and saves your choice to `codeContext.ai.enabled` and
-`codeContext.ai.model`.
+`codeContext.ai.model`. The same switch — **✨ AI on** once it's on — turns descriptions off and on again
+without touching your key.
 
 Prefer the keyboard? The same steps run from <kbd>⇧⌘P</kbd> (<kbd>Ctrl+Shift+P</kbd> on Windows/Linux) →
 **Code Context: Set API key** — which is also how to switch model or provider later.
@@ -115,6 +120,7 @@ Click **Re-analyse** when you're ready.
 | Show context panel | Open the panel for the function at the cursor |
 | Re-analyse this function | Rebuild and ask the AI again |
 | Set API key | Choose a provider and model and store its key — also turns AI on |
+| Turn AI on or off | Same as the **✨ Explain with AI** switch in the panel — turning it off keeps your key |
 | List editor models | What your editor offers extensions (e.g. Copilot) |
 | Clear AI narration cache | Forget saved descriptions |
 | Re-index workspace | Rebuild the index from scratch |
@@ -124,7 +130,7 @@ Click **Re-analyse** when you're ready.
 | Setting | Default | What it does |
 |---|---|---|
 | `codeContext.ai.enabled` | `false` | Turns on AI descriptions. Nothing leaves your machine until this is `true`. |
-| `codeContext.ai.model` | `claude-haiku-4-5` | Which model writes them. The prefix picks the provider: `claude-*` Anthropic, `gemini-*` Google, `gpt-*` OpenAI, `grok-*` xAI, `vscode-lm` your editor's models. |
+| `codeContext.ai.model` | *(none — you pick one when you turn AI on)* | Which model writes them. The prefix picks the provider: `claude-*` Anthropic, `gemini-*` Google, `gpt-*` OpenAI, `grok-*` xAI, `vscode-lm` your editor's models. |
 | `codeContext.ai.editorModel` | *(empty)* | Only with `vscode-lm`: prefer a model by name, e.g. `haiku` or `gpt-4.1`. |
 | `codeContext.codeLens` | `true` | Show the lens above each function. |
 | `codeContext.maxFiles` | `400` | How many source files to index for the name-matching fallback. |

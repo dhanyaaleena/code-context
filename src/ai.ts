@@ -42,7 +42,6 @@ const XAI_BASE_URL = 'https://api.x.ai/v1';
 
 type Provider = keyof typeof SECRETS;
 
-const DEFAULT_MODEL = 'claude-haiku-4-5';
 /**
  * What Set API key offers for each provider, cheapest first — the first is
  * marked Recommended. Keep in step with the codeContext.ai.model enum.
@@ -85,11 +84,9 @@ function providerOf(model: string): Provider {
   return 'anthropic';
 }
 
+/** The model the user chose — '' when none has been set. There is no built-in default. */
 function configuredModel(): string {
-  return (
-    vscode.workspace.getConfiguration('codeContext').get<string>('ai.model', DEFAULT_MODEL).trim() ||
-    DEFAULT_MODEL
-  );
+  return vscode.workspace.getConfiguration('codeContext').get<string>('ai.model', '').trim();
 }
 
 /**
@@ -385,6 +382,46 @@ export async function setApiKey(context: vscode.ExtensionContext): Promise<void>
   );
 }
 
+/**
+ * Whether AI is ready to run: a model has been chosen in settings, and that
+ * model's provider has a key (or, for vscode-lm, the editor offers a model).
+ * A key saved for some other provider doesn't count.
+ */
+export async function aiReady(context: vscode.ExtensionContext): Promise<boolean> {
+  const inspected = vscode.workspace.getConfiguration('codeContext').inspect<string>('ai.model');
+  const chosen = inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
+  if (!chosen) {
+    return false;
+  }
+  if (chosen === EDITOR_MODEL) {
+    return !!(await pickEditorModel());
+  }
+  return !!(await resolveKey(context, providerOf(chosen)));
+}
+
+/**
+ * The panel's AI switch. Off → on uses a saved key when there is one (the
+ * configured provider's first), and otherwise walks through setting one up.
+ * On → off only flips codeContext.ai.enabled: keys and the model stay put.
+ */
+export async function toggleAi(context: vscode.ExtensionContext): Promise<void> {
+  const config = vscode.workspace.getConfiguration('codeContext');
+  const target = config.inspect('ai.enabled')?.workspaceValue !== undefined
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+  if (aiEnabled()) {
+    await config.update('ai.enabled', false, target);
+    return;
+  }
+  // A model already chosen, with what it needs: just switch on. Anything else —
+  // no model yet, or no key for it — asks, rather than picking one silently.
+  if (await aiReady(context)) {
+    await config.update('ai.enabled', true, target);
+    return;
+  }
+  await setApiKey(context);
+}
+
 async function removeKey(context: vscode.ExtensionContext): Promise<void> {
   const saved: { label: string; provider: Provider }[] = [];
   for (const p of Object.keys(SECRETS) as Provider[]) {
@@ -406,8 +443,8 @@ async function removeKey(context: vscode.ExtensionContext): Promise<void> {
  */
 async function turnOnFor(provider: Provider, chosen?: string): Promise<string> {
   const config = vscode.workspace.getConfiguration('codeContext');
-  const current = config.get<string>('ai.model') ?? DEFAULT_MODEL;
-  const model = chosen ?? (current !== 'vscode-lm' && providerOf(current) === provider ? current : MODELS[provider][0].id);
+  const current = configuredModel();
+  const model = chosen ?? (current && current !== EDITOR_MODEL && providerOf(current) === provider ? current : MODELS[provider][0].id);
   // User settings, unless this workspace sets its own value — which would win.
   const target = (k: string) =>
     config.inspect(k)?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
@@ -452,6 +489,9 @@ type Route =
  */
 async function resolveRoute(context: vscode.ExtensionContext): Promise<Route | { error: string } | { setup: string }> {
   const configured = configuredModel();
+  if (!configured) {
+    return { setup: '' };
+  }
 
   if (configured === EDITOR_MODEL) {
     const chat = await pickEditorModel();
